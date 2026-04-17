@@ -7,6 +7,127 @@ rewriting history.
 
 ---
 
+## 2026-04-17 — v0.3 H2 block-flow completeness: evidence gap on browser confirmation
+
+Environment: Windows 10.0.26200, Bun 1.3.11, @prelight/core internal
+build (committed after H1 as 266c38d), no browser run.
+
+### What was implemented
+
+Three v0.3 markers in `packages/core/src/layout/block.ts` were
+retired:
+
+1. **Parent-child margin collapse** (CSS 2.1 §8.3.1). Opt-in via
+   a new `BlockContainer.collapseWithParent: true` flag plus parent
+   `padding` / `border` / `margin` fields. Edge conditions mirror
+   the spec: top collapse requires `padding.top === 0` AND
+   `border.top === 0`; bottom additionally requires
+   `innerHeight === undefined` (a definite container height
+   contains the bottom margin). Layout output exposes
+   `effectiveMarginTop` / `effectiveMarginBottom` so callers know
+   the container's outer margins for use in their own parent flow.
+2. **Empty-block self-collapse** (§8.3.1, "a block box with no
+   in-flow content, no padding, and no border ... its margins
+   collapse"). Predicate: `borderBoxHeight === 0` AND zero
+   top+bottom padding+border. Such children have top+bottom
+   margins folded into a single margin that participates in
+   adjacent-sibling collapse. New `BlockChildLayout.emptyBlock`
+   flag plus exported `isEmptyBlock()` predicate.
+3. **Clearance from floats** — retagged from `v0.3` to `v1.0+`.
+   Rationale recorded below.
+
+Two new out-of-scope markers for v0.4: chained-empty-into-parent
+collapse, and empty-container-self-collapse. Both need a second
+pass over children and are orthogonal to H2's immediate scope.
+
+### Evidence available
+
+- **20 new unit tests** in `packages/core/test/block.test.ts`
+  (C31–C50), organised as:
+    - C31–C36: parent-child top collapse — basic case, blocked
+      by padding, blocked by border, mixed-sign sums, equal
+      margins, zero-child-margin cases.
+    - C37–C41: parent-child bottom collapse — basic, blocked
+      by `innerHeight`, blocked by padding, blocked by border,
+      mixed-sign sums.
+    - C42–C44: combined edges + opt-in guards — both-edge
+      collapse, opt-in-off backwards compat, empty-children
+      with opt-in.
+    - C45–C50: empty-block mechanics — `isEmptyBlock` predicate,
+      variadic `collapseMarginList`, single empty between
+      non-empties, empty-with-padding is NOT empty, chain of
+      multiple empties, trailing empty after last non-empty.
+  Every expected value is derived from a specific §8.3.1 clause
+  in per-test comments.
+- **30 v0.2 block tests pass unchanged**. Backwards compat is
+  enforced by the `collapseWithParent === true` opt-in: without
+  that flag, the engine's output is byte-identical to v0.2.
+- Full gates: `bun run typecheck` (5/5 packages, 0 errors),
+  `bun run test` (321 passing — 50 block + 72 flex + 16 line-box
+  + 48 shape + 3 predicates + 19 verify = 208 core, plus 56 react,
+  11 vitest, 5 jest, 41 cli), `bun run build` (5/5), strict
+  bundle measure (@prelight/core 19.71 KB min / 7.58 KB gz within
+  budget 20.00 / 8.00).
+
+### Evidence MISSING
+
+- **Zero browser-confirmed cases for parent-child collapse or
+  empty-block self-collapse.** Same root cause as H1: the existing
+  `ground-truth/harness.ts` is exclusively a text-layout oracle.
+  It renders corpus strings via Playwright and checks
+  `getBoundingClientRect()` height against `verify()`'s prediction;
+  it has no corpus schema for block-container fixtures, no
+  per-child offsetTop extraction, no per-engine calibration for
+  sub-pixel margin-collapse rounding.
+- Building a structural ground-truth harness is a distinct phase
+  that would cover H1 (flex) AND H2 (block) AND H3 (aspect + box)
+  AND H4 (viewport units) in one go. That phase is NOT being
+  inserted into v0.3 mid-stream — it's flagged here and in the
+  HANDOFF block as a v0.3.0-rc blocker or a dedicated v0.4 kick-off
+  item. The user explicitly picked "unit-test-only evidence" for
+  H1 (Option A in HANDOFF §2026-04-17) and H2 preserves that
+  choice.
+
+### The evidence invariant (reaffirmed)
+
+No user-facing claim — README, docs site, package metadata,
+CHANGELOG prose describing browser verification — asserts that
+block-flow parent-child collapse or empty-block self-collapse is
+"verified against Chromium/WebKit/Firefox". CHANGELOG's H2 block
+explicitly states **unit-test-only evidence** and points here for
+the full context. When a structural ground-truth harness lands,
+this entry gets an `(amended YYYY-MM-DD, added N cases against
+Chromium vN)` tag with the new numbers.
+
+### Why floats clearance was retagged, not implemented
+
+CSS 2.1 §9.5.2 clearance is a substantial chunk of the visual
+formatting model: it interacts with block formatting context
+roots, `clear: left|right|both`, and float stacking. More
+importantly, Prelight's `Box` model has no `float` field — a
+consumer cannot actually express a float-in-flow child today, so
+the engine receives pure block-flow children by construction.
+Implementing clearance would require (a) extending `Box` to carry
+a float discriminator, (b) a separate float layout pass, and (c)
+substantial ground-truth calibration. Given how rare floats are
+in modern React/styled-components / CSS-in-JS codebases, the
+honest move is to flag rather than ship a partial or hypothetical
+implementation. `PRELIGHT-NEXT(v1.0+)` in `block.ts` documents the
+decision.
+
+### Bundle impact
+
+`@prelight/core` grew from 18.55 KB min / 7.25 KB gz (H1 end) to
+19.71 KB min / 7.58 KB gz (H2 end), a +1.16 KB min / +0.33 KB gz
+increase. That stays within the H1-set budget (20.00 KB min / 8.00
+KB gz) with ~0.29 KB min / ~0.42 KB gz headroom remaining. H3–H8
+may require a second budget bump; the decision is deferred to
+whichever phase first exceeds the remaining headroom, so the bump
+(if any) is made against a specific feature rather than
+speculatively.
+
+---
+
 ## 2026-04-17 — v0.3 H1 flex-wrap + align-items: evidence gap on browser confirmation
 
 Environment: Windows 10.0.26200, Bun 1.3.11, @prelight/core internal

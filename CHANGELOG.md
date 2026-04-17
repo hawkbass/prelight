@@ -6,6 +6,63 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Phase H2 — v0.3 block-flow completeness (2026-04-17)
+
+- **Parent-child margin collapse** in `@prelight/core/layout/block.ts`:
+  new `BlockContainer.collapseWithParent?: boolean` opt-in flag plus
+  `padding`, `border`, `margin` fields. When opted in, the first
+  child's top margin collapses with the parent's top margin if the
+  parent has no top padding or top border (CSS 2.1 §8.3.1). Symmetric
+  for bottom, with the additional gate that `innerHeight` is
+  undefined (a definite container height blocks bottom collapse). New
+  layout output fields: `effectiveMarginTop`, `effectiveMarginBottom`
+  (the container's outer margins after any collapse), plus boolean
+  flags `collapsedWithParentTop` / `collapsedWithParentBottom` so
+  callers can detect which edges participated.
+- **Empty-block self-collapse**: a child with `borderBoxHeight === 0`
+  AND zero top+bottom padding+border has its top and bottom margins
+  collapse into a single margin that participates in adjacent-sibling
+  collapse on both sides. New `BlockChildLayout.emptyBlock: boolean`
+  field flags which laid children are empty. New exports:
+  `isEmptyBlock()` predicate and `collapseMarginList()` variadic
+  helper (left-folds `collapseMargins` across N values). (H2)
+- **Backwards compatibility**: all 30 v0.2 block tests pass unchanged.
+  The default `collapseWithParent: undefined` path is byte-identical
+  in behaviour to the v0.2 engine: children's margins stay strictly
+  inside `contentHeight`, and `effectiveMarginTop/Bottom` default to
+  0. A caller that already supplies `padding`/`border`/`margin` but
+  sets `collapseWithParent: false` gets the same v0.2 stacking plus
+  the margin fields threaded through untouched. (H2)
+- **Floats clearance retagged** from `PRELIGHT-NEXT(v0.3)` to
+  `PRELIGHT-NEXT(v1.0+)`. Rationale: the `Box` model has no `float`
+  field, so the engine receives pure block-flow children by
+  construction; clearance is genuinely niche in modern CSS (and in
+  React specifically). Flagging rather than implementing keeps the
+  false-claim surface at zero. (H2)
+- **New out-of-scope markers** for v0.4: chained collapse through
+  empty first/last children into the parent (CSS permits "margins
+  collapse through" an empty box), and empty-container
+  self-collapse (the whole container's top+bottom margins fold into
+  one when it has no children, zero top+bottom padding+border, and
+  no definite height). Both are small follow-ons that need a second
+  pass in `computeBlockLayout`; H2 handles the 99% case with a
+  non-empty first/last child. (H2)
+- **Evidence**: 20 new unit tests in `packages/core/test/block.test.ts`
+  (C31–C50) across four categories: parent-child top collapse (6),
+  parent-child bottom collapse (5), combined edges + opt-in
+  backwards-compat guards (3), empty-block self-collapse (6). Every
+  expected value is derived from CSS 2.1 §8.3.1. **Browser-confirmed
+  ground-truth is not in this release** — same reason as H1: the
+  existing harness is a text-layout oracle, and a structural
+  ground-truth harness (corpus schema + per-child rect extraction +
+  sub-pixel tolerance) is a distinct multi-day phase. See
+  `FINDINGS.md` §2026-04-17 H2 for the full evidence-status note. (H2)
+- **Bundle impact**: `@prelight/core` grew 18.55 → 19.71 KB min /
+  7.25 → 7.58 KB gz (+1.16 KB min / +0.33 KB gz). Stays within the
+  H1-set budget (20.00 KB min / 8.00 KB gz). Remaining headroom:
+  ~0.29 KB min / ~0.42 KB gz. H3–H8 may require a second budget
+  bump; decision deferred to the phase that exceeds. (H2)
+
 ### Phase H1 — v0.3 flex-wrap + align-items (2026-04-17)
 
 - **Flex-wrap (multi-line)** in `@prelight/core/layout/flex.ts`: new

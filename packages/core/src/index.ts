@@ -53,7 +53,13 @@ export {
 } from './layout/box.js';
 export type { Box, BoxSpec, EdgeInsets } from './layout/box.js';
 export { computeFlexLayout, fitsFlex } from './layout/flex.js';
-export { collapseMargins, computeBlockLayout, fitsBlock } from './layout/block.js';
+export {
+  collapseMarginList,
+  collapseMargins,
+  computeBlockLayout,
+  fitsBlock,
+  isEmptyBlock,
+} from './layout/block.js';
 export { aspectFit, fitsAspect } from './layout/aspect.js';
 export type {
   AspectLayout,

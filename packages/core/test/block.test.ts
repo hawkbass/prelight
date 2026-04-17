@@ -1,25 +1,31 @@
 /**
- * G4 block-flow corpus: 30 cases.
+ * Block-flow corpus: 50 cases.
  *
  * Every expected value is derived from CSS 2.1 §8.3.1 (margin
  * collapsing) and §10 (visual formatting). Since the spec defines
  * the arithmetic, matching it means matching every browser.
  *
- *   1-8:   Single child + baseline stacking (no collapse)
- *   9-16:  Adjacent-sibling margin collapse (pos+pos, neg+neg, mixed)
- *  17-22:  Multi-child stacks with gaps + computed content height
- *  23-30:  fitsBlock predicate + overflow detection
+ *   1-8:   Single child + baseline stacking (no collapse)             [v0.2 G4.1]
+ *   9-16:  Adjacent-sibling margin collapse (pos+pos, neg+neg, mixed) [v0.2 G4.2]
+ *  17-22:  Multi-child stacks with gaps + computed content height     [v0.2 G4.3]
+ *  23-30:  fitsBlock predicate + overflow detection                   [v0.2 G4.4]
+ *  31-36:  Parent-child top margin collapse                           [v0.3 H2.1]
+ *  37-41:  Parent-child bottom margin collapse                        [v0.3 H2.2]
+ *  42-44:  Combined edges + opt-in backwards-compat guards            [v0.3 H2.3]
+ *  45-50:  Empty-block self-collapse                                  [v0.3 H2.4]
  */
 
 import { describe, expect, test } from 'vitest';
 
 import {
   box,
+  collapseMarginList,
   collapseMargins,
   computeBlockLayout,
   edgeInsetsAll,
   edgeInsetsOnly,
   fitsBlock,
+  isEmptyBlock,
   zeroInsets,
   type Box,
   type EdgeInsets,
@@ -338,5 +344,351 @@ describe('G4.4 fitsBlock predicate', () => {
     expect(r.layout.children).toHaveLength(3);
     expect(r.layout.contentHeight).toBe(60);
     expect(r.ok).toBe(true);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────
+// v0.3 H2: parent-child margin collapse, empty-block self-collapse
+// ──────────────────────────────────────────────────────────────────
+
+describe('H2.1 parent-child top margin collapse', () => {
+  test('C31 basic top collapse: first child top margin escapes through parent', () => {
+    // §8.3.1: parent has no top padding/border → first child top
+    // margin adjoins parent's top margin. Larger wins.
+    const child = mk(100, 20, edgeInsetsOnly({ top: 15 }));
+    const layout = computeBlockLayout([child], {
+      innerWidth: 200,
+      padding: zeroInsets(),
+      border: zeroInsets(),
+      margin: edgeInsetsOnly({ top: 10 }),
+      collapseWithParent: true,
+    });
+    expect(layout.collapsedWithParentTop).toBe(true);
+    expect(layout.children[0]!.top).toBe(0);
+    // effective = max(parent.mt=10, child.mt=15) = 15
+    expect(layout.effectiveMarginTop).toBe(15);
+    // contentHeight no longer includes child.mt
+    expect(layout.contentHeight).toBe(20);
+  });
+
+  test('C32 top collapse blocked by parent top padding', () => {
+    const child = mk(100, 20, edgeInsetsOnly({ top: 15 }));
+    const layout = computeBlockLayout([child], {
+      innerWidth: 200,
+      padding: edgeInsetsOnly({ top: 5 }),
+      border: zeroInsets(),
+      margin: edgeInsetsOnly({ top: 10 }),
+      collapseWithParent: true,
+    });
+    expect(layout.collapsedWithParentTop).toBe(false);
+    expect(layout.children[0]!.top).toBe(15);
+    expect(layout.effectiveMarginTop).toBe(10);
+    expect(layout.contentHeight).toBe(35);
+  });
+
+  test('C33 top collapse blocked by parent top border', () => {
+    const child = mk(100, 20, edgeInsetsOnly({ top: 15 }));
+    const layout = computeBlockLayout([child], {
+      innerWidth: 200,
+      padding: zeroInsets(),
+      border: edgeInsetsOnly({ top: 1 }),
+      margin: edgeInsetsOnly({ top: 10 }),
+      collapseWithParent: true,
+    });
+    expect(layout.collapsedWithParentTop).toBe(false);
+    expect(layout.children[0]!.top).toBe(15);
+    expect(layout.effectiveMarginTop).toBe(10);
+  });
+
+  test('C34 top collapse with mixed signs: sum', () => {
+    // parent.mt = 20, child.mt = -5 → mixed → 15
+    const child = mk(100, 20, edgeInsetsOnly({ top: -5 }));
+    const layout = computeBlockLayout([child], {
+      innerWidth: 200,
+      padding: zeroInsets(),
+      border: zeroInsets(),
+      margin: edgeInsetsOnly({ top: 20 }),
+      collapseWithParent: true,
+    });
+    expect(layout.collapsedWithParentTop).toBe(true);
+    expect(layout.effectiveMarginTop).toBe(15);
+    expect(layout.children[0]!.top).toBe(0);
+  });
+
+  test('C35 top collapse with equal margins: value unchanged', () => {
+    const child = mk(100, 20, edgeInsetsOnly({ top: 10 }));
+    const layout = computeBlockLayout([child], {
+      innerWidth: 200,
+      padding: zeroInsets(),
+      border: zeroInsets(),
+      margin: edgeInsetsOnly({ top: 10 }),
+      collapseWithParent: true,
+    });
+    expect(layout.effectiveMarginTop).toBe(10);
+  });
+
+  test('C36 top collapse: child with zero top margin → parent margin wins', () => {
+    const child = mk(100, 20);
+    const layout = computeBlockLayout([child], {
+      innerWidth: 200,
+      padding: zeroInsets(),
+      border: zeroInsets(),
+      margin: edgeInsetsOnly({ top: 20 }),
+      collapseWithParent: true,
+    });
+    expect(layout.effectiveMarginTop).toBe(20);
+    expect(layout.children[0]!.top).toBe(0);
+  });
+});
+
+describe('H2.2 parent-child bottom margin collapse', () => {
+  test('C37 basic bottom collapse: last child bottom margin escapes', () => {
+    const child = mk(100, 20, edgeInsetsOnly({ bottom: 15 }));
+    const layout = computeBlockLayout([child], {
+      innerWidth: 200,
+      padding: zeroInsets(),
+      border: zeroInsets(),
+      margin: edgeInsetsOnly({ bottom: 10 }),
+      collapseWithParent: true,
+    });
+    expect(layout.collapsedWithParentBottom).toBe(true);
+    // contentHeight stops at last child's border-box bottom = 0+20 = 20
+    expect(layout.contentHeight).toBe(20);
+    expect(layout.effectiveMarginBottom).toBe(15);
+  });
+
+  test('C38 innerHeight blocks bottom collapse (definite container height)', () => {
+    const child = mk(100, 20, edgeInsetsOnly({ bottom: 15 }));
+    const layout = computeBlockLayout([child], {
+      innerWidth: 200,
+      innerHeight: 100,
+      padding: zeroInsets(),
+      border: zeroInsets(),
+      margin: edgeInsetsOnly({ bottom: 10 }),
+      collapseWithParent: true,
+    });
+    expect(layout.collapsedWithParentBottom).toBe(false);
+    // child.mb stays inside contentHeight
+    expect(layout.contentHeight).toBe(35);
+    expect(layout.effectiveMarginBottom).toBe(10);
+  });
+
+  test('C39 bottom collapse blocked by parent bottom padding', () => {
+    const child = mk(100, 20, edgeInsetsOnly({ bottom: 15 }));
+    const layout = computeBlockLayout([child], {
+      innerWidth: 200,
+      padding: edgeInsetsOnly({ bottom: 5 }),
+      border: zeroInsets(),
+      margin: edgeInsetsOnly({ bottom: 10 }),
+      collapseWithParent: true,
+    });
+    expect(layout.collapsedWithParentBottom).toBe(false);
+    expect(layout.contentHeight).toBe(35);
+  });
+
+  test('C40 bottom collapse blocked by parent bottom border', () => {
+    const child = mk(100, 20, edgeInsetsOnly({ bottom: 15 }));
+    const layout = computeBlockLayout([child], {
+      innerWidth: 200,
+      padding: zeroInsets(),
+      border: edgeInsetsOnly({ bottom: 2 }),
+      margin: edgeInsetsOnly({ bottom: 10 }),
+      collapseWithParent: true,
+    });
+    expect(layout.collapsedWithParentBottom).toBe(false);
+  });
+
+  test('C41 bottom collapse with mixed signs: sum', () => {
+    // parent.mb=20, child.mb=-5 → mixed → 15
+    const child = mk(100, 20, edgeInsetsOnly({ bottom: -5 }));
+    const layout = computeBlockLayout([child], {
+      innerWidth: 200,
+      padding: zeroInsets(),
+      border: zeroInsets(),
+      margin: edgeInsetsOnly({ bottom: 20 }),
+      collapseWithParent: true,
+    });
+    expect(layout.collapsedWithParentBottom).toBe(true);
+    expect(layout.effectiveMarginBottom).toBe(15);
+  });
+});
+
+describe('H2.3 combined edges + opt-in backwards compat', () => {
+  test('C42 both edges collapse when parent has zero insets on both sides', () => {
+    // Wrapper with zero padding/border, single child with top+bottom
+    // margins, collapseWithParent=true. Top AND bottom collapse.
+    const child = mk(
+      100,
+      20,
+      edgeInsetsOnly({ top: 10, bottom: 15 }),
+    );
+    const layout = computeBlockLayout([child], {
+      innerWidth: 200,
+      padding: zeroInsets(),
+      border: zeroInsets(),
+      margin: edgeInsetsOnly({ top: 5, bottom: 8 }),
+      collapseWithParent: true,
+    });
+    expect(layout.collapsedWithParentTop).toBe(true);
+    expect(layout.collapsedWithParentBottom).toBe(true);
+    expect(layout.children[0]!.top).toBe(0);
+    expect(layout.contentHeight).toBe(20); // just the border-box, margins escape both sides
+    expect(layout.effectiveMarginTop).toBe(10); // max(5, 10)
+    expect(layout.effectiveMarginBottom).toBe(15); // max(8, 15)
+  });
+
+  test('C43 opt-in off: padding/border/margin supplied but collapseWithParent=false preserves v0.2 behaviour', () => {
+    const child = mk(100, 20, edgeInsetsOnly({ top: 15, bottom: 15 }));
+    const layout = computeBlockLayout([child], {
+      innerWidth: 200,
+      padding: zeroInsets(),
+      border: zeroInsets(),
+      margin: edgeInsetsOnly({ top: 10, bottom: 10 }),
+      collapseWithParent: false,
+    });
+    // v0.2: margins stay inside contentHeight, no collapse
+    expect(layout.collapsedWithParentTop).toBe(false);
+    expect(layout.collapsedWithParentBottom).toBe(false);
+    expect(layout.children[0]!.top).toBe(15);
+    expect(layout.contentHeight).toBe(15 + 20 + 15);
+    // effectiveMargin echoes parent.margin
+    expect(layout.effectiveMarginTop).toBe(10);
+    expect(layout.effectiveMarginBottom).toBe(10);
+  });
+
+  test('C44 empty children + opt-in: no collapse flags, effective margins equal parent margins', () => {
+    const layout = computeBlockLayout([], {
+      innerWidth: 200,
+      padding: zeroInsets(),
+      border: zeroInsets(),
+      margin: edgeInsetsOnly({ top: 10, bottom: 5 }),
+      collapseWithParent: true,
+    });
+    expect(layout.children).toHaveLength(0);
+    expect(layout.contentHeight).toBe(0);
+    expect(layout.collapsedWithParentTop).toBe(false);
+    expect(layout.collapsedWithParentBottom).toBe(false);
+    expect(layout.effectiveMarginTop).toBe(10);
+    expect(layout.effectiveMarginBottom).toBe(5);
+  });
+});
+
+describe('H2.4 empty-block self-collapse', () => {
+  function emptyMk(topM: number, bottomM: number): Box {
+    // A truly empty block: zero content height, zero padding, zero border.
+    return box({
+      content: {
+        cell: { language: 'en', scale: 1, width: 0 },
+        lines: 0,
+        measuredWidth: 0,
+        measuredHeight: 0,
+        naturalWidth: 0,
+        overflows: false,
+      },
+      margin: edgeInsetsOnly({ top: topM, bottom: bottomM }),
+    });
+  }
+
+  test('C45 isEmptyBlock predicate: recognises zero-height zero-inset boxes', () => {
+    const empty = emptyMk(10, 10);
+    const nonEmpty = mk(100, 20);
+    const emptyWithPadding = box({
+      content: {
+        cell: { language: 'en', scale: 1, width: 0 },
+        lines: 0,
+        measuredWidth: 0,
+        measuredHeight: 0,
+        naturalWidth: 0,
+        overflows: false,
+      },
+      padding: edgeInsetsAll(4),
+    });
+    expect(isEmptyBlock(empty)).toBe(true);
+    expect(isEmptyBlock(nonEmpty)).toBe(false);
+    expect(isEmptyBlock(emptyWithPadding)).toBe(false);
+  });
+
+  test('C46 collapseMarginList folds N margins associatively', () => {
+    // Positive + positive + positive = max
+    expect(collapseMarginList([5, 10, 15])).toBe(15);
+    // Negative + negative + negative = min
+    expect(collapseMarginList([-5, -10, -3])).toBe(-10);
+    // Mixed mixes via pairwise rules (associativity holds)
+    expect(collapseMarginList([20, 10])).toBe(20);
+    expect(collapseMarginList([])).toBe(0);
+  });
+
+  test('C47 empty between two non-empties collapses all three margins into one gap', () => {
+    // prev.bottom=10, empty.top=20, empty.bottom=8, next.top=5
+    // empty self-collapses → M = max(20,8)=20
+    // Whole gap = max(10, 20, 5) = 20
+    const prev = mk(100, 20, edgeInsetsOnly({ bottom: 10 }));
+    const empty = emptyMk(20, 8);
+    const next = mk(100, 20, edgeInsetsOnly({ top: 5 }));
+    const layout = computeBlockLayout([prev, empty, next], { innerWidth: 200 });
+    // prev at top=0, height=20 → bottom at 20
+    // empty placed at top=20 + max(10, 20) = 40, zero height
+    expect(layout.children[0]!.top).toBe(0);
+    expect(layout.children[1]!.top).toBe(40);
+    expect(layout.children[1]!.height).toBe(0);
+    expect(layout.children[1]!.emptyBlock).toBe(true);
+    // next placed after the full collapsed gap of 20
+    expect(layout.children[2]!.top).toBe(40);
+    expect(layout.contentHeight).toBe(60); // cursor=60, pendingMargin=next.bottom=0
+  });
+
+  test('C48 empty block with padding does NOT self-collapse', () => {
+    const prev = mk(100, 20, edgeInsetsOnly({ bottom: 10 }));
+    const nonEmpty = box({
+      content: {
+        cell: { language: 'en', scale: 1, width: 0 },
+        lines: 0,
+        measuredWidth: 0,
+        measuredHeight: 0,
+        naturalWidth: 0,
+        overflows: false,
+      },
+      padding: edgeInsetsAll(4),
+      margin: edgeInsetsOnly({ top: 20, bottom: 8 }),
+    });
+    const next = mk(100, 20);
+    const layout = computeBlockLayout([prev, nonEmpty, next], { innerWidth: 200 });
+    // nonEmpty has borderBoxHeight = 0 + 8(padding) = 8 → NOT empty per §8.3.1
+    // Adjacent-sibling collapse between prev(bottom=10) and nonEmpty(top=20) = 20
+    expect(layout.children[1]!.emptyBlock).toBe(false);
+    expect(layout.children[1]!.height).toBe(8);
+    expect(layout.children[1]!.top).toBe(40); // prev(0+20) + gap(20) = 40
+    // adjacent collapse between nonEmpty(bottom=8) and next(top=0) = 8
+    expect(layout.children[2]!.top).toBe(40 + 8 + 8);
+  });
+
+  test('C49 multiple empties in a row fold into one collapsed gap', () => {
+    const prev = mk(100, 20, edgeInsetsOnly({ bottom: 5 }));
+    const e1 = emptyMk(10, 12);
+    const e2 = emptyMk(8, 15);
+    const e3 = emptyMk(3, 7);
+    const next = mk(100, 20, edgeInsetsOnly({ top: 2 }));
+    const layout = computeBlockLayout([prev, e1, e2, e3, next], { innerWidth: 200 });
+    // Each empty collapses top+bottom into its own single margin:
+    //   e1: max(10,12)=12, e2: max(8,15)=15, e3: max(3,7)=7
+    // Then the whole chain between prev and next collapses into:
+    //   max(prev.bottom=5, 12, 15, 7, next.top=2) = 15
+    expect(layout.children[0]!.top).toBe(0);
+    expect(layout.children[1]!.emptyBlock).toBe(true);
+    expect(layout.children[2]!.emptyBlock).toBe(true);
+    expect(layout.children[3]!.emptyBlock).toBe(true);
+    expect(layout.children[4]!.top).toBe(0 + 20 + 15);
+    expect(layout.contentHeight).toBe(20 + 15 + 20);
+  });
+
+  test('C50 trailing empty after last non-empty: emptyBlock flag set, contentHeight includes collapsed margin', () => {
+    const prev = mk(100, 20, edgeInsetsOnly({ bottom: 5 }));
+    const empty = emptyMk(10, 15);
+    const layout = computeBlockLayout([prev, empty], { innerWidth: 200 });
+    // prev.bottom=5, empty self-collapsed = max(10,15)=15 → pendingMargin = max(5,15)=15
+    // No parent-child collapse (not opted in) → contentHeight includes it
+    expect(layout.children[1]!.emptyBlock).toBe(true);
+    expect(layout.children[1]!.height).toBe(0);
+    expect(layout.contentHeight).toBe(20 + 15);
   });
 });

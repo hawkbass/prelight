@@ -3,6 +3,10 @@
 Orientation for AI agents (Claude, Cursor, Codex) and new human contributors
 joining Prelight mid-stream. This file is the map; the territory is the code.
 
+> **Picking up mid-stream?** Read `HANDOFF.md` first — it has the current
+> state, live decisions, and pointers to the transcripts that produced
+> them. AGENTS.md is durable orientation; HANDOFF.md is recent context.
+
 ## What Prelight is
 
 A static, DOM-free layout verifier. For text: you give it a string, a font,
@@ -48,7 +52,7 @@ posts must be backed by a reproducible artifact in the repo.
 - "94.5% / 94.7% / 94.3% overall, ≥ 97.9% non-emoji on Chromium / WebKit / Firefox across 928 cases" ← `ground-truth/run.ts --strict --browser all`
 - "~33 KB min / ~13 KB gz total shipped across five packages" (v0.2; was ~16.4 KB post-F3, ~13.2 KB at end-of-Phase-E; grew with G1–G7 structural primitives + style-resolver + colour layer) ← `bun run measure-bundle`; budget in `scripts/bundle-budget.json`, policy in DECISIONS #014, #017, and #018
 - Any predicate behavior ← `packages/core/test/*.test.ts`
-- Any structural layout behavior ← `packages/core/test/{box,flex,block,aspect}.test.ts` (120 cases)
+- Any structural layout behavior ← `packages/core/test/{box,flex,block,aspect}.test.ts` (172 cases)
 - Any style-resolver behavior ← `packages/react/test/resolve-styles.test.tsx` (50 cases)
 
 If you change a number, update the artifact in the same commit. If you
@@ -73,7 +77,7 @@ cannot reproduce a number, remove the claim — do not soften it.
 bun install                 # one-time
 bun run typecheck           # every package
 bun run build               # every package
-bun run test                # 254 tests (v0.2), ~3s
+bun run test                # 321 tests (v0.2 + v0.3 H1–H2), ~3s
 bun run measure-bundle      # quick size check
 ```
 
