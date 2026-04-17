@@ -4,8 +4,8 @@
     "gzipped": 8704
   },
   "@prelight/react": {
-    "minified": 5632,
-    "gzipped": 2432
+    "minified": 6656,
+    "gzipped": 2944
   },
   "@prelight/vitest": {
     "minified": 2560,

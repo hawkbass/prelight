@@ -54,6 +54,7 @@ posts must be backed by a reproducible artifact in the repo.
 - Any predicate behavior ← `packages/core/test/*.test.ts`
 - Any structural layout behavior ← `packages/core/test/{box,flex,block,aspect}.test.ts` (192 cases)
 - Any style-resolver behavior ← `packages/react/test/resolve-styles.test.tsx` (50 cases)
+- Any slot-marker behavior ← `packages/react/test/slots.test.tsx` (24 cases)
 
 If you change a number, update the artifact in the same commit. If you
 cannot reproduce a number, remove the claim — do not soften it.
@@ -77,7 +78,7 @@ cannot reproduce a number, remove the claim — do not soften it.
 bun install                 # one-time
 bun run typecheck           # every package
 bun run build               # every package
-bun run test                # 341 tests (v0.2 + v0.3 H1–H3), ~3s
+bun run test                # 365 tests (v0.2 + v0.3 H1–H4), ~3s
 bun run measure-bundle      # quick size check
 ```
 

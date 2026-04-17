@@ -11,14 +11,13 @@
  *     CSS cascades from external stylesheets and CSS-in-JS libraries are
  *     out of reach for a pure-static walker.
  *   - Multi-slot verification. v0.1 treats the rendered output as one text
- *     blob. v0.2 will add slot markers.
+ *     blob. v0.3 H4 added `extractSlotText()` / `findSlots()` /
+ *     `resolveStyles({ slot })` for this; see `slots.ts`.
  *
- * PRELIGHT-NEXT(v0.3): slot markers for multi-slot components
- *   (deferred from v0.2; see ROADMAP.md).
- * PRELIGHT-NEXT(v0.3): emotion + styled-components StyleResolver
+ * PRELIGHT-NEXT(v0.3 H7): emotion + styled-components StyleResolver
  *   plugins. The v0.2 `resolveStyles()` surface already accepts
  *   them; the plugins themselves need a runtime probe and are
- *   tracked separately.
+ *   tracked as a separate phase.
  * PRELIGHT-NEXT(v1.0): full style resolution via Presize.
  */
 

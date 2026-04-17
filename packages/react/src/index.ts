@@ -8,6 +8,12 @@ export type {
   StyleSource,
 } from './resolve-styles.js';
 export {
+  extractSlotText,
+  findSlots,
+  findSlotPath,
+  SLOT_ATTR,
+} from './slots.js';
+export {
   inlineStyle,
   cssVariables,
   parseLengthPx,

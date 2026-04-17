@@ -6,6 +6,81 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Phase H4 — v0.3 slot markers for multi-slot components (2026-04-17)
+
+- **`data-prelight-slot` marker convention** in `@prelight/react`:
+  any React element carrying `data-prelight-slot="name"` is a
+  verifiable slot. `data-*` was chosen deliberately — React
+  forwards it to the rendered HTML attribute, there's no runtime
+  component to import, and it composes cleanly with shadcn/Radix-
+  style primitives that already accept rest-props. Exported as
+  the `SLOT_ATTR` constant for callers that want to reference it
+  symbolically. (H4)
+- **New walkers** in `@prelight/react/slots.ts`:
+  - `findSlots(element)` returns every unique slot name in
+    depth-first preorder (first-encounter wins on duplicates).
+  - `findSlotPath(element, slotName)` returns the full ancestor
+    path from the tree root to the slot element, or `null` when
+    the slot is absent. Exposed so callers can replay their own
+    cascade along the slot path if they want to extend
+    `resolveStyles`'s default semantics.
+  - `extractSlotText(element, slotName)` renders the *slot
+    subtree* standalone via `react-dom/server`'s
+    `renderToStaticMarkup` and runs it through the existing
+    `htmlToText()` — so only the slot's text reaches the
+    verifier. Missing slots throw with the known-slots list
+    (`"slot 'foo' not found; known slots in this tree: [title,
+    body]"`). (H4)
+- **`resolveStyles({ slot })`**: the cascade now accepts an
+  optional `slot: string` option. When set, the walker replays
+  resolvers along the exact ancestor path from root to slot
+  instead of the default first-text-branch descent — so the
+  returned styles reflect exactly what cascades to the slot,
+  unrelated siblings are skipped, and the resolver chain sees
+  only the elements that genuinely contribute to the slot's
+  styling. Missing slots throw with the same helpful list. The
+  original first-text-branch behaviour is preserved byte-for-byte
+  when `slot` is omitted — the existing 50 resolve-styles cases
+  pass untouched. (H4)
+- **`verifyComponent({ slot })`**: end-to-end slot verification
+  in one call. When `slot` is set, `extractSlotText` governs the
+  text that flows through the verifier, and when `autoResolve`
+  is also set the slot is forwarded to `resolveStyles` so the
+  auto-derived `font` / `maxWidth` / `lineHeight` reflect the
+  slot's cascade. Explicit `font` / `maxWidth` / `lineHeight` on
+  the spec still win over autoResolve, matching v0.2 option
+  precedence. (H4)
+- **PRELIGHT-NEXT retaggings**: `extract.ts`'s `PRELIGHT-NEXT(v0.3)`
+  for slot markers is removed (landed); the sibling
+  `PRELIGHT-NEXT(v0.3)` for emotion + styled-components plugins
+  is retagged to `PRELIGHT-NEXT(v0.3 H7)` to keep H7 the single
+  home for CSS-in-JS runtime probes. The `resolve-styles.ts`
+  docstring is amended to reflect slot-aware cascade semantics.
+  (H4)
+- **Evidence**: 24 new unit tests in `packages/react/test/slots.test.tsx`
+  (C01–C24) split into four groups: `findSlots` discovery (6),
+  `findSlotPath` targeting (5), `extractSlotText` rendering (8)
+  including same-tag nesting and entity decoding, and
+  `resolveStyles` / `verifyComponent` slot integration (5). All
+  assertions are either derivable from React's preorder tree
+  walk or from `react-dom/server` output — no browser required.
+  Existing 50 resolve-styles cases + 6 verifyComponent cases
+  pass unchanged, which pins the slot-option default as truly
+  opt-in. (H4)
+- **Bundle impact**: `@prelight/react` grew 4.92 → 6.14 KB min /
+  2.19 → 2.64 KB gz (+1.22 KB min / +0.45 KB gz). The 1 KB
+  single-phase tripwire is crossed; the cost is the new
+  `slots.ts` walker surface plus the `resolveStyles` slot
+  branch plus `verifyComponent` wiring. A first-draft
+  implementation included a depth-tracking HTML slicer — dropped
+  during this phase after realising `renderToStaticMarkup` can
+  take the slot subtree directly, saving ~0.74 KB min. Budget
+  bumped from 5.50 → 6.50 KB min / 2.38 → 2.88 KB gz (~0.36 KB
+  min / ~0.24 KB gz headroom). Same bump-with-feature pattern
+  as H1 and H3; `core` bundle unchanged. (H4)
+- **Test count**: 341 → 365 (v0.2 + v0.3 H1–H4). `AGENTS.md`
+  updated in this commit.
+
 ### Phase H3 — v0.3 aspect `object-position` + percentage edge insets (2026-04-17)
 
 - **CSS `object-position` support** in `@prelight/core/layout/aspect.ts`:

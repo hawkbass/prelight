@@ -42,6 +42,7 @@ import {
 
 import { extractText } from './extract.js';
 import { resolveStyles, type ResolveStylesOptions } from './resolve-styles.js';
+import { extractSlotText } from './slots.js';
 
 export interface ComponentVerifySpec {
   element: ReactElement | ((language: string) => ReactElement);
@@ -62,6 +63,16 @@ export interface ComponentVerifySpec {
   autoResolve?: boolean;
   /** Forwarded to `resolveStyles()` when `autoResolve` is true. */
   resolveOptions?: ResolveStylesOptions;
+  /**
+   * v0.3 (H4) — verify a named slot rather than the whole
+   * component. Extracts text via `extractSlotText(element, slot)`
+   * (so only that slot's text flows through the verifier), and
+   * when `autoResolve` is true also passes `{ slot }` to
+   * `resolveStyles()` so the cascade follows the slot path.
+   * The slot must be tagged with `data-prelight-slot={slot}` on
+   * an element; an absent slot throws with the known-slots list.
+   */
+  slot?: string;
 }
 
 export function verifyComponent(spec: ComponentVerifySpec): VerifyResult {
@@ -79,10 +90,14 @@ export function verifyComponent(spec: ComponentVerifySpec): VerifyResult {
   for (const lang of languages) {
     const element =
       typeof spec.element === 'function' ? spec.element(lang) : spec.element;
-    text[lang] = extractText(element);
+    text[lang] = spec.slot !== undefined ? extractSlotText(element, spec.slot) : extractText(element);
 
     if (spec.autoResolve && resolved === undefined) {
-      resolved = resolveStyles(element, spec.resolveOptions);
+      const resolveOpts: ResolveStylesOptions = { ...(spec.resolveOptions ?? {}) };
+      if (spec.slot !== undefined && resolveOpts.slot === undefined) {
+        resolveOpts.slot = spec.slot;
+      }
+      resolved = resolveStyles(element, resolveOpts);
       font = font ?? resolved.font;
       maxWidth = maxWidth ?? resolved.maxWidth;
       lineHeight = lineHeight ?? resolved.lineHeight;

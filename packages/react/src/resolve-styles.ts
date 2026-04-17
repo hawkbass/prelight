@@ -25,15 +25,21 @@
  * no external network calls. Everything comes from the React tree
  * and the caller-supplied resolvers.
  *
- * PRELIGHT-NEXT(v0.3): slot markers. Right now the "innermost
- * text-bearing descendant" is defined as the deepest element in the
- * first text-containing branch. With slot markers the caller will
- * be able to name a specific slot and resolve its styles.
+ * v0.3 (H4) adds slot-targeted resolution via the `slot` option.
+ * When `slot: 'title'` is passed, the walker descends along the
+ * path from the root to the element carrying
+ * `data-prelight-slot="title"` and applies resolvers at each
+ * step — so the returned styles reflect exactly what cascades to
+ * that slot, skipping unrelated siblings. If the slot isn't
+ * present in the tree we throw with the list of known slots, so
+ * callers fail fast instead of silently falling back to the
+ * first-text-branch cascade.
  */
 
 import type { ReactElement, ReactNode } from 'react';
 import { isValidElement } from 'react';
 
+import { findSlotPath, findSlots } from './slots.js';
 import {
   inlineStyle,
   parseLengthPx,
@@ -68,6 +74,15 @@ export interface ResolveStylesOptions {
    * `fontSize` has been established by the cascade. Defaults to 16.
    */
   rootFontSizePx?: number;
+  /**
+   * Resolve styles *for a named slot* instead of the innermost
+   * text-bearing descendant of the first element branch. The slot
+   * is the first element (depth-first preorder) carrying
+   * `data-prelight-slot={slot}`. If no such element exists,
+   * `resolveStyles` throws with the list of slots it found — fail
+   * fast rather than silently returning unrelated styles.
+   */
+  slot?: string;
 }
 
 /**
@@ -98,19 +113,20 @@ export function resolveStyles(
     maxWidth: undefined as string | number | undefined,
   };
 
-  /** Descend into the first child that itself has children, then recurse. */
-  function visit(node: ReactNode): void {
-    if (!isValidElement(node)) return;
-
+  function applyNode(node: ReactElement): void {
     const elementType =
       typeof node.type === 'string' ? node.type : (node.type as { name?: string } | null)?.name ?? 'Component';
-
     for (const resolver of resolvers) {
       const fragment = resolver.resolve(node);
       if (!fragment) continue;
       applyFragment(fragment, resolver.name, elementType, state, cssVariables, sources);
     }
+  }
 
+  /** Descend into the first child that itself has children, then recurse. */
+  function visit(node: ReactNode): void {
+    if (!isValidElement(node)) return;
+    applyNode(node);
     const props = (node.props ?? {}) as { children?: ReactNode };
     const children = toArray(props.children);
     // Descend into the first element child. v0.2 treats the element
@@ -125,7 +141,23 @@ export function resolveStyles(
     }
   }
 
-  visit(element);
+  if (options.slot !== undefined) {
+    // Slot-targeted cascade: replay resolvers along the exact
+    // ancestor path to the slot, no sibling descent. If the slot
+    // isn't present, throw with a helpful list — callers want to
+    // fail loudly here, not fall back to unrelated styles.
+    const path = findSlotPath(element, options.slot);
+    if (path === null) {
+      const known = findSlots(element);
+      const knownStr = known.length > 0 ? known.join(', ') : '(none)';
+      throw new Error(
+        `resolveStyles: slot "${options.slot}" not found; known slots in this tree: [${knownStr}].`,
+      );
+    }
+    for (const node of path) applyNode(node);
+  } else {
+    visit(element);
+  }
 
   // Post-cascade: resolve var() references in the final values
   // against the accumulated variable map.

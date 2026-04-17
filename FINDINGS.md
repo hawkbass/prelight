@@ -7,6 +7,160 @@ rewriting history.
 
 ---
 
+## 2026-04-17 — v0.3 H4 slot markers for multi-slot components: evidence status
+
+Environment: Windows 10.0.26200, Bun 1.3.11, @prelight/react
+internal build (committed after H3 as 188c141), no browser run.
+
+### What was implemented
+
+Two `PRELIGHT-NEXT(v0.3)` markers in `@prelight/react` were
+retired (`extract.ts`'s slot-markers marker landed; the sibling
+emotion/styled-components marker is retagged to
+`PRELIGHT-NEXT(v0.3 H7)` to consolidate CSS-in-JS runtime probes
+into one H7 phase).
+
+**Marker convention.** Any React element with
+`data-prelight-slot="name"` is a verifiable slot. Chosen because:
+
+- React forwards `data-*` props to the rendered HTML attribute
+  without transformation, so tree-walking and (if ever needed
+  later) rendered-HTML inspection target the same marker.
+- No runtime component to import or render — composes naturally
+  with shadcn/Radix-style primitives that already spread rest
+  props onto their root DOM element.
+- Works across every element type.
+
+**API surface**:
+
+- `SLOT_ATTR = 'data-prelight-slot'` — symbolic constant for
+  tooling that constructs slot-tagged elements at runtime.
+- `findSlots(element): string[]` — depth-first preorder
+  enumeration, deduped first-encounter-wins. Useful for
+  diagnostics ("slot 'title' not found; known: [header, body]")
+  and for corpus generators.
+- `findSlotPath(element, slotName): ReactElement[] | null` —
+  returns the exact ancestor path from root to slot, or null.
+  Exposed so downstream tools (e.g. custom cascade engines) can
+  replay their own logic along the slot path.
+- `extractSlotText(element, slotName): string` — renders the
+  slot subtree standalone via `react-dom/server` and runs it
+  through `htmlToText()`. Missing slots throw with a helpful
+  `known slots in this tree: [...]` message.
+- `resolveStyles(element, { slot })` — existing cascade walker
+  gains an optional `slot: string`. When set, resolvers replay
+  along the ancestor path instead of the default first-text-
+  branch descent. Missing slots throw.
+- `verifyComponent({ slot })` — end-to-end slot verification.
+  When `slot` is set, `extractSlotText` feeds the verifier; when
+  `autoResolve` is also set, the slot is forwarded to
+  `resolveStyles` so auto-derived font/maxWidth/lineHeight
+  reflect the slot's cascade. Explicit spec-level values still
+  win, matching v0.2 option precedence.
+
+### Available evidence (unit-test level)
+
+- **H4 corpus**: 24 cases in `packages/react/test/slots.test.tsx`
+  (C01–C24). Four groups:
+
+  1. `findSlots` discovery (6): empty tree → []; single slot;
+     multi-slot preorder; duplicate dedup (first wins);
+     non-string slot values ignored without crashing;
+     `SLOT_ATTR` constant pinned to `'data-prelight-slot'` so
+     external tooling sees a stable contract.
+  2. `findSlotPath` targeting (5): root-is-slot; nested slot
+     path of three ancestors; absent → null; duplicate preorder
+     (first branch wins); sibling-branch skip (path-pop
+     correctness after failed first branch).
+  3. `extractSlotText` rendering (8): leaf text; nested
+     elements collapse; same-tag sibling nesting (standalone-
+     subtree render means depth tracking isn't even needed);
+     different-tag bodies; missing slot error lists known
+     slots; empty-tree known-list prints `(none)`; HTML
+     entities (`&`) round-trip correctly via React SSR +
+     `htmlToText`; standalone-subtree render proves ancestor
+     siblings are excluded from slot text.
+  4. `resolveStyles` + `verifyComponent` slot integration (5):
+     cascade follows slot path (title → `24px Inter`, body →
+     `14px Inter` inheriting from the div root); sibling branch
+     that would win in default first-text-branch mode is
+     correctly skipped when a slot is targeted; missing slot
+     throws; `verifyComponent({ slot })` end-to-end pass with
+     autoResolve; explicit `font` wins over autoResolve with
+     slot targeting (v0.2 precedence preserved).
+
+- **Regression gates**: 50 pre-existing `resolve-styles.test.tsx`
+  cases and 6 `verify-component.test.tsx` cases all pass
+  unchanged after the H4 rewiring. The `slot: undefined` path
+  stays byte-identical to v0.2 behaviour.
+
+- **Full gates** (bun, Vitest, Jest, bundle budget) all green:
+  typecheck 5/5, build 5/5, test **365 passing** (core 228,
+  react 80, vitest 11, jest 5, cli 41; was 341 at end of H3),
+  bundle `react` 6.14 KB min / 2.64 KB gz within the new
+  6.50 / 2.88 budget.
+
+### What is **not** in this release (the honest gap)
+
+- **No browser-confirmed round-trip.** The H4 features are
+  100% in the React tree and React's SSR output. Claiming
+  "slot verification matches Chromium / WebKit / Firefox
+  layout" is a claim about *layout*, which is what Presize
+  (v1.0) will deliver. H4 only claims that text extraction
+  and style cascade are slot-aware — and those are unit-level
+  claims. No browser harness is needed for H4, and we
+  shouldn't pretend otherwise: the feature doesn't render,
+  doesn't paint, and doesn't depend on any browser-specific
+  behaviour. This is different from H1/H2/H3 where the
+  features are *layout engines* and a browser harness is the
+  eventual correctness oracle.
+
+In the interim the evidence invariant binds H4 as follows:
+
+- README / site may claim "slot-aware text extraction and
+  style resolution" and reference this FINDINGS entry.
+- README / site MUST NOT claim "pixel-accurate slot layout"
+  because slot-aware *layout* is a v1.0 Presize concern, not
+  an H4 one.
+
+### Bundle impact
+
+`@prelight/react` grew 4.92 → 6.14 KB minified / 2.19 → 2.64 KB
+gzipped (+1.22 KB min / +0.45 KB gz). Cost breakdown, roughly:
+
+- `slots.ts` walker + extractor surface: ~0.75 KB min
+- `resolveStyles` slot-path branch + replay: ~0.35 KB min
+- `verifyComponent` slot wiring: ~0.12 KB min
+
+A first-pass `sliceMarkupForSlot` depth-tracking HTML slicer
+was dropped in-phase (saving ~0.74 KB min) after realising
+that `renderToStaticMarkup` can take the slot subtree directly
+without slicing the parent render. This simplification is
+**the feature**, not an afterthought — it makes the slot
+semantics identical to existing `extractText` (a standalone
+SSR render) rather than introducing a new "slice a wrapping
+render" path.
+
+Budget bumped from 5.50 → 6.50 KB min / 2.38 → 2.88 KB gz
+(~0.36 KB min / ~0.24 KB gz headroom). Same bump-with-feature
+rule as H1 and H3; the `core` bundle is unchanged.
+
+### Evidence invariant reminder
+
+- H4 shipping into `@prelight/react` with unit-level evidence
+  is appropriate: nothing in this phase is a layout claim.
+- Any future feature that names a slot in its output
+  (e.g. "slot 'body' failed maxLines") inherits the existing
+  verifier's browser-evidence requirements via the text the
+  slot feeds in.
+- When runtime probes land in H7 and the style cascade can
+  read styled-components / emotion output, FINDINGS must get a
+  fresh entry that proves the probe's output against a
+  rendered-in-browser reference — that claim is beyond H4's
+  scope.
+
+---
+
 ## 2026-04-17 — v0.3 H3 aspect `object-position` + percentage edge insets: evidence status
 
 Environment: Windows 10.0.26200, Bun 1.3.11, @prelight/core internal
