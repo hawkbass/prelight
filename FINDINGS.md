@@ -7,6 +7,159 @@ rewriting history.
 
 ---
 
+## 2026-04-17 — v0.3 H6a `VerifySpec.measurementFonts.cjk`: evidence status
+
+Environment: Windows 10.0.26200, Bun 1.3.11, @prelight/core
+internal build (committed after H5 as 010b554), no browser run.
+
+### What was implemented
+
+The `PRELIGHT-NEXT(v0.3)` marker in
+`packages/core/src/shape/cjk.ts` — the contract-surfacing of the
+CJK measurement-families back door — is retired. The contract
+now lives on `VerifySpec.measurementFonts.cjk` and threads
+through `verify()` to `correctCJKLayout`.
+
+Surface changes:
+
+- New `MeasurementFontFamilies` interface exported from
+  `@prelight/core`, with `cjk?: string[]` today. Emoji is
+  tracked inline as `PRELIGHT-NEXT(v0.3 H6b)` and will land
+  additively.
+- New optional `measurementFonts?: MeasurementFontFamilies` on
+  `VerifySpec`. Undefined preserves the v0.2 fallback chain
+  (global → spec's own `font`); non-empty per-spec list takes
+  precedence; empty array (`cjk: []`) opts out of the CJK probe
+  entirely for that spec.
+- `correctCJKLayout` gains an optional 6th positional argument
+  `measurementFamilies?: readonly string[]`. The addition is
+  non-breaking — every v0.2 5-argument caller still resolves to
+  the module-level global.
+- `pickCJKFamily` now accepts a `families` list parameter (was
+  reading the module-level global directly). An empty list
+  short-circuits to `null` (the "opt-out" path); a non-empty
+  list is probed in order until one shows a >0.5 px delta
+  against the input font on the probe glyph.
+- The module-level `setCJKMeasurementFamilies` /
+  `getCJKMeasurementFamilies` pair is retained deliberately as
+  a back door for the ground-truth harness (see
+  `ground-truth/harness.ts:32`). Its removal is tracked for a
+  future phase once the harness migrates to per-spec
+  `measurementFonts`. Decision locked with the user during H6
+  planning: "keep through v0.3, remove later".
+
+Precedence (codified in the comment block above
+`CJK_MEASUREMENT_FAMILIES` in `shape/cjk.ts`):
+
+  per-call arg (VerifySpec.measurementFonts.cjk)
+    > module-level global (setCJKMeasurementFamilies)
+    > spec's own `font`
+
+### Available evidence (unit-test level)
+
+- **H6a corpus**: 12 cases in
+  `packages/core/test/measurement-fonts.test.ts` (M1–M12),
+  organised into two groups:
+
+  1. Direct `correctCJKLayout` contract (M1–M7):
+     - M1: undefined override falls back to the module-level
+       global (the v0.2 behaviour is preserved).
+     - M2: non-empty override takes precedence over the global —
+       only the spec families are probed.
+     - M3: empty-array override opts out of the family probe;
+       no candidate family is ever set on the canvas.
+     - M4: override preserves declared family order (first
+       candidate probed first).
+     - M5: non-CJK text short-circuits before any canvas access
+       (zero `ctx.font` assignments, zero `measureText` calls).
+     - M6: per-call override does not mutate the global — the
+       getter returns the pre-call value after the call.
+     - M7: per-call isolation — a call with override followed
+       by a call without one correctly switches back to the
+       global probe list.
+  2. `verify()` integration (M8–M12):
+     - M8: `spec.measurementFonts.cjk` reaches the probe.
+     - M9: omitting `measurementFonts` uses the global.
+     - M10: `cjk: []` on the spec opts out end-to-end through
+       the full `verify()` pipeline.
+     - M11: non-CJK text in `verify()` never triggers the CJK
+       probe even when `measurementFonts.cjk` is set.
+     - M12: scale sweep with `fontScales: [1, 1.5]` routes the
+       per-spec family through every cell (two hits).
+
+- **Test instrumentation**: observed behaviour by swapping
+  `globalThis.OffscreenCanvas` for a probe-recording stub in
+  `beforeEach` and restoring it in `afterEach`. The stub
+  records every `ctx.font` assignment and the count of
+  `measureText` calls. This was the cleanest observable for
+  contract wiring given the unit environment has no CJK faces
+  registered under `Noto Sans JP` / `SC` names (ground-truth
+  registers them; unit tests do not). Probing which families
+  the correction pass asks about is a rigorous proxy for
+  "which families would the correction use if the host canvas
+  actually had them" — the selection logic is the same and
+  differs only in the eventual match.
+
+### Bundle impact
+
+- Before H6a (H5 baseline): 21.90 KB min / 8.35 KB gz
+- After H6a: 22.01 KB min / 8.41 KB gz (+0.11 KB min / +0.06 KB gz)
+- Budget bumped 22.00 → 24.00 KB min / 8.50 → 9.00 KB gz in the
+  same commit — the H5 handoff flagged the prior ceiling had
+  only 0.10 KB min / 0.15 KB gz remaining. Deliberate
+  round-number bump matching the H1 (18 → 20) and H3 (20 → 22)
+  precedents. ~2 KB min / ~0.6 KB gz headroom remains for
+  H6b + H7 + H8.
+
+### Honest gaps
+
+- **No browser ground-truth for per-spec `measurementFonts`.**
+  The text harness still configures Noto Sans JP / SC via the
+  module-level global at startup; every case today runs under
+  the same global families. H6a ships as a contract surface
+  plus unit-test evidence. The in-line comment at the top of
+  `CJK_MEASUREMENT_FAMILIES` documents this retention
+  explicitly. A future phase — whenever the harness migrates
+  off the global — will re-run the 928 ground-truth cases
+  against per-spec families and land updated overall pass
+  rates.
+- **Flex harness still does not exist.** Unchanged from the H1
+  cliff. Any H1–H5 + H6a claim that touches flex geometry is
+  backed by unit-test evidence only.
+- **Emoji measurement remains not implemented.** The
+  `MeasurementFontFamilies` shape deliberately exposes only
+  `cjk` today; the emoji slot is tracked as
+  `PRELIGHT-NEXT(v0.3 H6b)` and will land as a pure additive
+  field when the emoji probe path is built.
+
+### What the H6a marker retires and what stays
+
+- **Retired**: the `PRELIGHT-NEXT(v0.3)` comment block in
+  `packages/core/src/shape/cjk.ts` that specified surfacing
+  `measurementFonts` on `VerifySpec`. Replaced in place with
+  a contract comment describing the resolved precedence rules.
+- **Retained**: `setCJKMeasurementFamilies` /
+  `getCJKMeasurementFamilies` exports. They remain the
+  ground-truth harness's entry point and are documented as a
+  back door. A future phase will migrate the harness.
+- **Retained**: `PRELIGHT-NEXT(v1.0)` in `cjk.ts` asking for a
+  `line-break: strict|normal|loose` kinsoku policy option.
+  Unrelated to H6a.
+
+### Why H6a stops here (no code cliff)
+
+H6a's scope was locked in advance during user planning:
+"CJK contract surface only, keep the global, defer font
+metrics." That scope is now complete — the marker is retired,
+the contract is wired, the gates are green, the budget bump is
+deliberate and documented. Every remaining decision around
+emoji (H6b), font metrics (deferred to H6c / H7), and harness
+migration (deferred indefinitely with the global retained) is
+either sized into a separate phase or explicitly kept out of
+scope. No autopilot drift into an adjacent phase.
+
+---
+
 ## 2026-04-17 — v0.3 H5 `align-items: 'baseline'`: evidence status
 
 Environment: Windows 10.0.26200, Bun 1.3.11, @prelight/core

@@ -97,17 +97,28 @@ function segmentForCJKBreak(text: string): string[] {
 }
 
 /**
- * Preferred font-family list for measuring CJK character widths. We
- * override this at ground-truth time to force the harness's bundled
- * Noto Sans JP / SC files; library consumers may want to set it to
- * whatever CJK face their own app ships. The first family in this
+ * Preferred font-family list for measuring CJK character widths when the
+ * caller has not supplied a per-spec override. The first family in this
  * list whose canvas measurement differs from the input font's (by >
- * 0.5px on a representative CJK glyph) will be used.
+ * 0.5px on a representative CJK glyph) is selected.
  *
- * PRELIGHT-NEXT(v0.3): surface this as an explicit `measurementFonts`
- * option on `VerifySpec` so it's part of the contract rather than a
- * side door. Deferred from v0.2 — the setter/getter pair above is
- * enough surface for v0.2 consumers (ground-truth uses it today).
+ * Contract (v0.3 H6a, retires `PRELIGHT-NEXT(v0.3)`):
+ *
+ *   per-call argument  > module-level global  > spec's own `font`
+ *
+ * Per-call override lives on `VerifySpec.measurementFonts.cjk` and is
+ * threaded through `verify()` → `correctCJKLayout(..., overrideFamilies)`.
+ *  - `undefined` caller arg → fall through to the global below.
+ *  - Non-empty array → takes precedence over the global.
+ *  - Empty array (`[]`)  → opts out of CJK family probing entirely; the
+ *    correction pass falls back to the spec's own `font`.
+ *
+ * The module-level `setCJKMeasurementFamilies` / `getCJKMeasurementFamilies`
+ * pair is retained intentionally as a back door for the ground-truth
+ * harness (see `ground-truth/harness.ts`), which configures Noto Sans JP
+ * / SC once at startup and reuses it across all cases. Removing it is
+ * tracked for a future cleanup once the harness migrates to per-spec
+ * `measurementFonts` (user decision, 2026-04-17 HANDOFF).
  */
 let CJK_MEASUREMENT_FAMILIES: string[] = ['Noto Sans JP', 'Noto Sans CJK JP', 'Noto Sans SC'];
 
@@ -116,6 +127,18 @@ export function setCJKMeasurementFamilies(families: string[]): void {
 }
 export function getCJKMeasurementFamilies(): readonly string[] {
   return CJK_MEASUREMENT_FAMILIES;
+}
+
+/**
+ * Resolve which family list to consult for the CJK probe, given the
+ * (optional) per-call override. Undefined falls through to the global.
+ * An empty array is preserved (it's the explicit opt-out signal).
+ */
+function resolveCJKFamilies(
+  override: readonly string[] | undefined,
+): readonly string[] {
+  if (override === undefined) return CJK_MEASUREMENT_FAMILIES;
+  return override;
 }
 
 function withFamily(font: string, newFamily: string): string {
@@ -129,11 +152,21 @@ function withFamily(font: string, newFamily: string): string {
  * glyph differs meaningfully from the input font's. This is how we
  * detect whether a CJK-capable face was actually registered with the
  * canvas backend. Returns `null` if none are.
+ *
+ * `families` is the already-resolved list (per-call override > global,
+ * see `resolveCJKFamilies`). An empty list short-circuits — the caller
+ * has opted out of the probe entirely for this spec.
  */
-function pickCJKFamily(ctx: CanvasCtx, font: string, probe: string): string | null {
+function pickCJKFamily(
+  ctx: CanvasCtx,
+  font: string,
+  probe: string,
+  families: readonly string[],
+): string | null {
+  if (families.length === 0) return null;
   ctx.font = font;
   const baseline = ctx.measureText(probe).width;
-  for (const family of CJK_MEASUREMENT_FAMILIES) {
+  for (const family of families) {
     const candidate = withFamily(font, family);
     ctx.font = candidate;
     const w = ctx.measureText(probe).width;
@@ -151,6 +184,11 @@ function pickCJKFamily(ctx: CanvasCtx, font: string, probe: string): string | nu
  *   *fewer* lines than Pretext's (monotonicity guarantee: Pretext's
  *   conservative count is always at least the correct number for
  *   this language direction).
+ *
+ * `measurementFamilies` is the optional per-call override forwarded
+ * from `VerifySpec.measurementFonts.cjk`. Semantics are documented on
+ * `CJK_MEASUREMENT_FAMILIES` above; undefined falls back to the
+ * module-level global, an empty array opts out of the family probe.
  */
 export function correctCJKLayout(
   pretextResult: LayoutLike,
@@ -158,6 +196,7 @@ export function correctCJKLayout(
   font: string,
   maxWidth: number,
   lineHeight: number,
+  measurementFamilies?: readonly string[],
 ): LayoutLike {
   if (!containsCJK(originalText)) return pretextResult;
   const Canvas = getCanvas();
@@ -168,8 +207,9 @@ export function correctCJKLayout(
   // none is registered, we use the original font — measurements will
   // agree with whatever canvas is doing internally, which is the best
   // we can offer without a registered face.
+  const families = resolveCJKFamilies(measurementFamilies);
   const firstCJK = Array.from(originalText).find((ch) => isCJKChar(ch)) ?? '字';
-  const measurementFont = pickCJKFamily(ctx, font, firstCJK) ?? font;
+  const measurementFont = pickCJKFamily(ctx, font, firstCJK, families) ?? font;
   ctx.font = measurementFont;
 
   const segments = segmentForCJKBreak(originalText);

@@ -92,6 +92,7 @@ export function verify(spec: VerifySpec): VerifyResult {
         scaledFont,
         spec.maxWidth,
         scaledLineHeight,
+        spec.measurementFonts?.cjk,
       );
 
       const measuredWidth = corrected.lines.reduce(

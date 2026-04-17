@@ -48,6 +48,28 @@ export interface Constraints {
 }
 
 /**
+ * Per-spec font family overrides for the script-specific measurement passes
+ * that run on top of Pretext's primary layout (CJK today; emoji in H6b).
+ *
+ * The first family whose canvas measurement of a probe glyph differs from
+ * the spec's `font` by more than 0.5px is selected for the correction pass.
+ * A consumer that knows it ships a CJK-capable face under a specific family
+ * name sets that name here; consumers with no CJK face on hand can leave
+ * this undefined and Prelight falls back to the module-level global
+ * (`setCJKMeasurementFamilies`) and ultimately to the spec's own `font`.
+ *
+ * Passing `cjk: []` explicitly opts out of the CJK family probe for this
+ * spec — the correction pass then uses the spec's `font` directly.
+ *
+ * PRELIGHT-NEXT(v0.3 H6b): add `emoji?: string[]` once the emoji probe
+ * path lands. Additive only — no consumer of v0.3 H6a is affected.
+ */
+export interface MeasurementFontFamilies {
+  /** Ordered preference list of CJK-capable font families to probe. */
+  cjk?: string[];
+}
+
+/**
  * Input to the verifier. Everything needed to answer "does this text fit?"
  * at the full matrix of (language, fontScale).
  *
@@ -65,6 +87,13 @@ export interface VerifySpec {
   fontScales?: FontScale[];
   /** Whitelist of language keys from `text` to verify. Defaults to all. */
   languages?: string[];
+  /**
+   * Per-spec override of the family lists used for script-specific
+   * measurement passes (CJK in H6a; emoji in H6b). Undefined falls back
+   * to the module-level global; a non-empty list takes precedence over
+   * the global; an empty list (`cjk: []`) opts out of the probe entirely.
+   */
+  measurementFonts?: MeasurementFontFamilies;
 }
 
 /**

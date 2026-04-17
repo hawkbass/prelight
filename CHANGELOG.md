@@ -6,6 +6,75 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Phase H6a — v0.3 `VerifySpec.measurementFonts.cjk` contract surface (2026-04-17)
+
+- **`MeasurementFontFamilies` interface** in `@prelight/core`:
+  a per-spec override for the font families that drive the
+  script-specific measurement passes sitting on top of Pretext's
+  primary layout. Exposed today as `{ cjk?: string[] }`; the
+  emoji slot is tracked as `PRELIGHT-NEXT(v0.3 H6b)` inline and
+  will land additively without breaking H6a consumers. (H6a)
+- **`VerifySpec.measurementFonts?: MeasurementFontFamilies`** —
+  the new contract surface that retires
+  `PRELIGHT-NEXT(v0.3)` in `packages/core/src/shape/cjk.ts`.
+  Precedence is documented on `CJK_MEASUREMENT_FAMILIES`:
+  per-call arg > module-level global > spec's own `font`.
+  Undefined falls through to the global; a non-empty list
+  takes precedence; `cjk: []` is the explicit opt-out signal
+  that disables the probe entirely for that spec. (H6a)
+- **Global setter retained by design** — `setCJKMeasurementFamilies`
+  / `getCJKMeasurementFamilies` stay exported as a back door for
+  the ground-truth harness (which configures Noto Sans JP / SC
+  once at startup and reuses it across all 928 cases). Removing
+  the global is tracked as a future cleanup once the harness
+  migrates to per-spec `measurementFonts`. User decision locked
+  in the H6 planning pass: "keep for H6, remove later." (H6a)
+- **Threading** — `verify()` now forwards
+  `spec.measurementFonts?.cjk` as the optional 6th argument to
+  `correctCJKLayout`. The addition is non-breaking; every
+  existing caller that passes 5 positional arguments still
+  resolves to the global. (H6a)
+- **Evidence**: 12 new unit tests in
+  `packages/core/test/measurement-fonts.test.ts` (M1–M12)
+  across two groups — direct `correctCJKLayout` contract (M1–M7:
+  undefined falls back to global, non-empty override wins over
+  global, empty array opts out, override preserves family order,
+  non-CJK text short-circuits, overrides don't mutate the global,
+  successive calls are isolated) and `verify()` integration
+  (M8–M12: spec override reaches the probe, omission uses global,
+  empty opts out end-to-end, non-CJK text never triggers the
+  probe, scale sweep routes through every cell). Unit tests stub
+  `globalThis.OffscreenCanvas` to record `ctx.font` assignments,
+  which is the observable way to prove contract wiring without
+  needing real CJK faces registered in the unit environment. (H6a)
+- **Bundle impact**: `@prelight/core` grew 21.90 → 22.01 KB min /
+  8.35 → 8.41 KB gz (+0.11 KB min / +0.06 KB gz). The +0.01 KB
+  min nudge crossed the prior 22.00 KB ceiling — same pattern
+  H5 flagged in its handoff note — so the budget was bumped
+  22.00 → 24.00 KB min / 8.50 → 9.00 KB gz in the same commit
+  as a deliberate round-number step (matches the H1 18→20 and
+  H3 20→22 precedent). ~2 KB min / ~0.6 KB gz headroom now
+  remains for H6b (emoji probe) + H7 (runtime style probes) +
+  H8. (H6a)
+- **Scope decisions locked with user before implementation**:
+  (1) Split H6 into H6a (CJK contract only) and H6b (new emoji
+  probe path) rather than combining them — emoji is a new
+  capability, not a contract move; (2) Keep the global setter as
+  a back door through v0.3; (3) Defer font ascent/descent
+  threading (that `Measurement` shape change deserves its own
+  phase, H6c or H7). (H6a)
+- **Honest gap**: no browser ground-truth. The flex harness
+  still does not exist, and the text harness doesn't exercise
+  per-spec `measurementFonts` — the ground-truth run continues
+  to use the module-level global via `setCJKMeasurementFamilies`
+  at startup. H6a ships as pure contract surface + unit-test
+  evidence. The `cjk.ts` comment at the top of
+  `CJK_MEASUREMENT_FAMILIES` explicitly documents this back-door
+  retention; a future phase will migrate the harness and
+  re-run ground-truth under per-spec families. (H6a)
+- **Test count**: `bun run test` → 395 passing (core 258, react
+  80, vitest 11, jest 5, cli 41); +12 vs H5. (H6a)
+
 ### Phase H5 — v0.3 `align-items: 'baseline'` (2026-04-17)
 
 - **Baseline alignment in flex** — `FlexAlign` union extended

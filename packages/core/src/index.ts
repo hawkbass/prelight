@@ -24,6 +24,7 @@ export type {
   LocalizedText,
   MatrixCell,
   Measurement,
+  MeasurementFontFamilies,
   VerifyResult,
   VerifySpec,
 } from './types.js';
