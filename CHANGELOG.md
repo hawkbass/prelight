@@ -6,6 +6,76 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Phase G — v0.2 structural primitives (2026-04-16)
+
+- **Style resolution** in `@prelight/react`: `resolveStyles()` plus a
+  `StyleResolver` plugin surface (two built-ins: `inlineStyle()`,
+  `cssVariables()`). Walks a React tree to determine the effective
+  `font` / `maxWidth` / `lineHeight` for the innermost text-bearing
+  descendant; `verifyComponent(..., { autoResolve: true })` now needs
+  no duplicate style metadata. Length/line-height parsers handle
+  `px`, `rem`, unitless, `var(--token)` with fallbacks. 50/50 unit
+  tests. (G1)
+- **Box model primitives** in `@prelight/core/layout/box.ts`:
+  `EdgeInsets` + `Box` pure data types, `all()` / `symmetric()` /
+  `only()` / `parseEdgeInsets()` / `zeroInsets()` factories,
+  `box()` / `addInsets()` / `horizontalInset()` / `verticalInset()`
+  arithmetic, and `contentWidthFromBorderBox()` for the CSS
+  `content-box` ⇄ `border-box` inverse. 30/30 unit tests. (G2)
+- **Single-axis flex engine** in `@prelight/core/layout/flex.ts`:
+  `computeFlexLayout()` + `fitsFlex()` predicate per CSS Flex L1
+  §9.7 for the no-wrap case (grow, shrink, basis, gap,
+  justify-content, minMain/maxMain clamps, margins). Row + column
+  direction both covered. 40/40 unit tests. (G3)
+- **Block flow engine** in `@prelight/core/layout/block.ts`:
+  `computeBlockLayout()` + `fitsBlock()` predicate. Adjacent-sibling
+  vertical margin collapse per CSS 2.1 §8.3.1 (positive-max,
+  mixed-sign, negative-min). 30/30 unit tests. (G4)
+- **Image aspect-ratio layout** in
+  `@prelight/core/layout/aspect.ts`: `aspectFit()` + `fitsAspect()`
+  covering `object-fit: contain | cover | fill | scale-down | none`,
+  with letterbox / clipping / scale thresholds on the predicate.
+  20/20 unit tests. (G5)
+- **New matchers** across the testing surface: `toFitFlex`,
+  `toFitBlock`, `toFitAspect` in `@prelight/vitest` and
+  `@prelight/jest`. CLI `prelight.config.{ts,tsx}` gains a `layouts`
+  array with `{ kind: 'flex' | 'block' | 'aspect', spec }` entries;
+  the runner and the terminal + JSON reporters surface layout
+  results alongside text-layout tests. (G6)
+- **TTY-aware CLI reporter** with zero dependencies: one-file ANSI
+  colour layer (`packages/cli/src/color.ts`) with a full decision
+  table for `NO_COLOR`, `FORCE_COLOR`, `FORCE_COLOR=0`, and stream
+  `isTTY`. Default reporter stays plain-text; new
+  `createTerminalReporter(palette)` + `autoPalette(stream)` wired
+  into the CLI entry so piping to a file never emits escape
+  sequences. 12/12 colour tests + 12/12 reporter tests. (G7)
+- **Public API additions** in `@prelight/core`: `Box`, `BoxSpec`,
+  `EdgeInsets`, `edgeInsetsAll`, `edgeInsetsOnly`,
+  `edgeInsetsSymmetric`, `parseEdgeInsets`, `zeroInsets`,
+  `addInsets`, `horizontalInset`, `verticalInset`,
+  `contentWidthFromBorderBox`, `computeFlexLayout`, `fitsFlex`,
+  `FlexContainer`, `FlexItem`, `FlexLayout`, `FitsFlexSpec`,
+  `FitsFlexResult`, `FlexDirection`, `FlexJustify`,
+  `FlexItemLayout`, `collapseMargins`, `computeBlockLayout`,
+  `fitsBlock`, `BlockContainer`, `BlockLayout`, `BlockChildLayout`,
+  `FitsBlockSpec`, `FitsBlockResult`, `aspectFit`, `fitsAspect`,
+  `AspectLayout`, `FitsAspectSpec`, `FitsAspectResult`,
+  `ObjectFit`, `IntrinsicImage`, `Slot`. All additive, v0.1
+  surface untouched.
+- **Bundle budget updates** (intentional growth for structural
+  primitives): core 6.20 KB → 16.79 KB min / 2.61 KB → 6.63 KB gz;
+  react 0.92 → 4.92 KB / 0.51 → 2.19 KB gz (style-resolver is
+  react-side); vitest 951 B → 2.10 KB / 538 B → 806 B gz; jest
+  1.07 → 2.24 KB / 905 B gz; cli 4.11 → 7.23 KB / 1.82 → 2.69 KB gz
+  (color layer + layout matcher glue). Total shipped:
+  **13.2 KB → 33.3 KB min / 6.1 KB → 13.2 KB gz**. Still an order of
+  magnitude under any CSS-in-JS runtime it displaces. ADR 017
+  records the "primitives live in core" policy; ADR 018 records
+  the zero-dep colour decision.
+- **Total v0.2 test count**: 254 tests green across all five
+  packages (core 156, react 56, vitest 11, jest 5, cli 41) plus the
+  928-case ground-truth corpus.
+
 ### Phase F — v0.1.x quality hardening (2026-04-16)
 
 - **Cross-engine ground-truth**: harness rewritten to be engine-agnostic;

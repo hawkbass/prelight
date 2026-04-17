@@ -104,9 +104,10 @@ function segmentForCJKBreak(text: string): string[] {
  * list whose canvas measurement differs from the input font's (by >
  * 0.5px on a representative CJK glyph) will be used.
  *
- * PRELIGHT-NEXT(v0.2): surface this as an explicit `measurementFonts`
+ * PRELIGHT-NEXT(v0.3): surface this as an explicit `measurementFonts`
  * option on `VerifySpec` so it's part of the contract rather than a
- * side door.
+ * side door. Deferred from v0.2 — the setter/getter pair above is
+ * enough surface for v0.2 consumers (ground-truth uses it today).
  */
 let CJK_MEASUREMENT_FAMILIES: string[] = ['Noto Sans JP', 'Noto Sans CJK JP', 'Noto Sans SC'];
 

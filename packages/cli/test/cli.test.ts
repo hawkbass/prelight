@@ -6,35 +6,41 @@ import { tmpdir } from 'node:os';
 import { main } from '../src/cli.js';
 
 vi.mock('../src/runner.js', () => ({
-  runVerification: vi.fn(async (config: { tests: { name: string }[]; failFast?: boolean }) => {
-    const runs = config.failFast
-      ? config.tests.slice(0, 1).map((t) => ({
-          test: t,
-          result: {
-            ok: false,
-            cellsChecked: 1,
-            failures: [
-              {
-                cell: { language: 'en', scale: 1, width: 40 },
-                constraint: 'noOverflow',
-                message: 'overflows',
-                actual: 200,
-                expected: 40,
-              },
-            ],
-          },
-        }))
-      : config.tests.map((t) => ({ test: t, result: { ok: true, cellsChecked: 1 } }));
-    const anyFail = runs.some((r) => !r.result.ok);
-    return {
-      ok: !anyFail,
-      testsTotal: config.tests.length,
-      testsFailed: anyFail ? 1 : 0,
-      cellsChecked: runs.length,
-      runs,
-      elapsedMs: 1,
-    };
-  }),
+  runVerification: vi.fn(
+    async (config: { tests?: { name: string }[]; failFast?: boolean }) => {
+      const tests = config.tests ?? [];
+      const runs = config.failFast
+        ? tests.slice(0, 1).map((t) => ({
+            test: t,
+            result: {
+              ok: false,
+              cellsChecked: 1,
+              failures: [
+                {
+                  cell: { language: 'en', scale: 1, width: 40 },
+                  constraint: 'noOverflow',
+                  message: 'overflows',
+                  actual: 200,
+                  expected: 40,
+                },
+              ],
+            },
+          }))
+        : tests.map((t) => ({ test: t, result: { ok: true, cellsChecked: 1 } }));
+      const anyFail = runs.some((r) => !r.result.ok);
+      return {
+        ok: !anyFail,
+        testsTotal: tests.length,
+        testsFailed: anyFail ? 1 : 0,
+        cellsChecked: runs.length,
+        runs,
+        layoutsTotal: 0,
+        layoutsFailed: 0,
+        layoutRuns: [],
+        elapsedMs: 1,
+      };
+    },
+  ),
 }));
 
 function withSilencedConsole(): {

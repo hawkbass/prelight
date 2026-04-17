@@ -3,7 +3,7 @@
 > Static layout verification for the web.
 > Catch layout bugs before the browser ever runs.
 
-**Status:** v0.1 in development. Not yet published to npm. See [ROADMAP.md](./ROADMAP.md) for the path to 1.0 and [FINDINGS.md](./FINDINGS.md) for empirical claims actually measured (vs. planned).
+**Status:** v0.2 in development. Not yet published to npm. See [ROADMAP.md](./ROADMAP.md) for the path to 1.0 and [FINDINGS.md](./FINDINGS.md) for empirical claims actually measured (vs. planned).
 
 ---
 
@@ -69,13 +69,46 @@ test('Save button fits at every language', () => {
 })
 ```
 
-## What v0.1 does (and doesn't)
+Structural layout (v0.2):
 
-**Does:** verify text layout predicates (line count, overflow, fit at scale, single-line, truncation) for a given font + width + language matrix. Ships as a core library, Vitest + Jest matchers, a React component adapter, and a CLI. Ground-truth harness compares every corpus case against **Chromium, WebKit, and Firefox** via Playwright — tolerance ±1px height with exact line count. On our **928-case** corpus (7 languages + a 51-string ZWJ/skin-tone/flag/Emoji-15.1 stress set), measured **94.5% / 94.7% / 94.3% agreement** overall, **≥ 97.9% on every non-emoji cell** (Latin, RTL, CJK all above 95%). Emoji sits at 90% on every engine; the gap is font-fallback variance (bundled Inter has no emoji glyphs), documented in [FINDINGS.md §F6](./FINDINGS.md) — not a layout bug. The remaining non-emoji gap is a handful of identified kinsoku and URL-wrap edges tracked in [ROADMAP.md](./ROADMAP.md).
+```ts
+import '@prelight/vitest'
+import { box, zeroInsets } from '@prelight/core'
 
-**Doesn't:** verify structural layout (flex, grid, images, padding propagation). That's v1.0 — paired with a Presize engine. See [ROADMAP.md](./ROADMAP.md).
+test('hero image covers its slot without clipping more than 2px', () => {
+  expect({
+    intrinsic: { width: 1600, height: 900 },
+    slot: { width: 400, height: 225 },
+    fit: 'cover',
+    maxClipPx: 2,
+  }).toFitAspect()
+})
 
-This scope is deliberate. A smaller, honest v0.1 beats a larger, fragile one.
+test('nav bar packs within the header at every scale', () => {
+  const children = [
+    { box: box({ content: m(80, 32), margin: zeroInsets() }) },
+    { box: box({ content: m(80, 32), margin: zeroInsets() }) },
+    { box: box({ content: m(80, 32), margin: zeroInsets() }) },
+  ]
+  expect({
+    container: { innerMain: 360, gap: 12, justify: 'space-between' },
+    children,
+  }).toFitFlex()
+})
+```
+
+## What v0.2 does (and doesn't)
+
+**Does:**
+
+- **Text layout predicates** (v0.1, frozen): line count, overflow, fit at scale, single-line, truncation for a given font + width + language matrix. Ships as a core library, Vitest + Jest matchers, a React component adapter, and a CLI. Ground-truth harness compares every corpus case against **Chromium, WebKit, and Firefox** via Playwright — tolerance ±1px height with exact line count. On our **928-case** corpus (7 languages + a 51-string ZWJ/skin-tone/flag/Emoji-15.1 stress set), measured **94.5% / 94.7% / 94.3% agreement** overall, **≥ 97.9% on every non-emoji cell** (Latin, RTL, CJK all above 95%). Emoji sits at 90% on every engine; the gap is font-fallback variance (bundled Inter has no emoji glyphs), documented in [FINDINGS.md §F6](./FINDINGS.md) — not a layout bug.
+- **Structural primitives** (v0.2, new): `Box` + `EdgeInsets` box model, `fitsFlex` (single-axis flex L1 §9.7 — grow / shrink / basis / gap / justify), `fitsBlock` (block flow with CSS 2.1 §8.3.1 adjacent-sibling margin collapse), `fitsAspect` (image `object-fit: contain | cover | fill | scale-down | none` with letterbox / clip / scale thresholds). Each exposed as a matcher in `@prelight/vitest` + `@prelight/jest` and as a config entry in the CLI.
+- **Style resolution** (v0.2, new): `@prelight/react`'s `resolveStyles()` walks a React element tree, composes inline styles and CSS variables via a `StyleResolver` plugin contract, and populates `verifyComponent()`'s `font` / `maxWidth` / `lineHeight` automatically — no duplicate metadata in tests.
+- **Zero-dependency CLI reporter** with full `NO_COLOR` / `FORCE_COLOR` support. Pipes to files cleanly; colours when the terminal supports it.
+
+**Doesn't:** grid layout, positioning (`absolute` / `fixed`), containment, transforms, or the full Presize DOM-free layout engine. Those are v1.0. See [ROADMAP.md](./ROADMAP.md).
+
+This scope is deliberate. A smaller, honest v0.2 beats a larger, fragile one.
 
 ## Install
 

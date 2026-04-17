@@ -56,12 +56,58 @@ describe('loadConfig', () => {
     }
   });
 
-  test('rejects configs missing the tests array', async () => {
+  test('rejects configs missing both tests and layouts', async () => {
     const dir = tmp();
     try {
       const file = join(dir, 'prelight.config.mjs');
       writeFileSync(file, 'export default { hello: 1 }');
-      await expect(loadConfig(file)).rejects.toThrow(/must declare a 'tests' array/);
+      await expect(loadConfig(file)).rejects.toThrow(
+        /must declare at least a 'tests' or 'layouts' array/,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('accepts a layouts-only config', async () => {
+    const dir = tmp();
+    try {
+      const file = join(dir, 'prelight.config.mjs');
+      writeFileSync(
+        file,
+        `export default {
+  layouts: [
+    {
+      name: 'hero',
+      kind: 'aspect',
+      spec: {
+        intrinsic: { width: 1600, height: 900 },
+        slot: { width: 400, height: 225 },
+        fit: 'contain',
+      },
+    },
+  ],
+}`,
+      );
+      const cfg = await loadConfig(file);
+      expect(cfg.layouts).toHaveLength(1);
+      expect(cfg.layouts![0]!.kind).toBe('aspect');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('rejects layouts with invalid kind', async () => {
+    const dir = tmp();
+    try {
+      const file = join(dir, 'prelight.config.mjs');
+      writeFileSync(
+        file,
+        `export default {
+  layouts: [{ name: 'x', kind: 'grid', spec: {} }],
+}`,
+      );
+      await expect(loadConfig(file)).rejects.toThrow(/kind must be one of/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

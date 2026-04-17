@@ -14,9 +14,10 @@
  *   3 — unexpected runtime error
  */
 
+import { autoPalette } from './color.js';
 import { findConfig, loadConfig } from './config.js';
 import { runVerification } from './runner.js';
-import { jsonReport, terminalReporter } from './reporter.js';
+import { createTerminalReporter, jsonReport } from './reporter.js';
 
 interface Args {
   reporter: 'terminal' | 'json';
@@ -82,7 +83,8 @@ export async function main(argv: string[]): Promise<number> {
   if (args.reporter === 'json') {
     process.stdout.write(JSON.stringify(jsonReport(summary), null, 2) + '\n');
   } else {
-    process.stderr.write(terminalReporter.summary(summary) + '\n');
+    const reporter = createTerminalReporter(autoPalette(process.stderr));
+    process.stderr.write(reporter.summary(summary) + '\n');
   }
 
   return summary.ok ? 0 : 1;

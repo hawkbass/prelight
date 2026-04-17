@@ -16,6 +16,9 @@ declare global {
   namespace jest {
     interface Matchers<R> {
       toLayout(options: ToLayoutOptions): R;
+      toFitFlex(): R;
+      toFitBlock(): R;
+      toFitAspect(): R;
     }
   }
 }

@@ -1,7 +1,7 @@
 /**
  * Loader and validator for `prelight.config.ts`.
  *
- * Shape:
+ * Shape (v0.2):
  *
  *   // prelight.config.ts
  *   import type { PrelightConfig } from '@prelight/cli'
@@ -23,6 +23,19 @@
  *         fontScales: [1, 1.25, 1.5],
  *       },
  *     ],
+ *     // v0.2: structural predicate tests.
+ *     layouts: [
+ *       {
+ *         name: 'Nav bar',
+ *         kind: 'flex',
+ *         spec: { container: { innerMain: 320, gap: 8 }, children: [...] },
+ *       },
+ *       {
+ *         name: 'Hero image',
+ *         kind: 'aspect',
+ *         spec: { intrinsic: { width: 1600, height: 900 }, slot: { width: 400, height: 225 }, fit: 'cover' },
+ *       },
+ *     ],
  *   }
  *
  *   export default config
@@ -33,13 +46,29 @@ import { resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 
 import type { ComponentVerifySpec } from '@prelight/react';
+import type {
+  FitsAspectSpec,
+  FitsBlockSpec,
+  FitsFlexSpec,
+} from '@prelight/core';
 
 export interface PrelightTest extends ComponentVerifySpec {
   name: string;
 }
 
+/**
+ * Structural-layout tests — one of flex, block, or aspect. Each
+ * carries the exact spec the corresponding core predicate expects.
+ */
+export type PrelightLayoutTest =
+  | { name: string; kind: 'flex'; spec: FitsFlexSpec }
+  | { name: string; kind: 'block'; spec: FitsBlockSpec }
+  | { name: string; kind: 'aspect'; spec: FitsAspectSpec };
+
 export interface PrelightConfig {
-  tests: PrelightTest[];
+  tests?: PrelightTest[];
+  /** v0.2: structural predicate tests. */
+  layouts?: PrelightLayoutTest[];
   failFast?: boolean;
 }
 
@@ -75,11 +104,26 @@ export async function loadConfig(path: string): Promise<PrelightConfig> {
     throw new Error(`Prelight config at ${path} must export a default object.`);
   }
   const candidate = def as PrelightConfig;
-  if (!Array.isArray(candidate.tests)) {
-    throw new Error(`Prelight config at ${path} must declare a 'tests' array.`);
+  if (candidate.tests === undefined && candidate.layouts === undefined) {
+    throw new Error(
+      `Prelight config at ${path} must declare at least a 'tests' or 'layouts' array.`,
+    );
   }
-  for (const [i, t] of candidate.tests.entries()) {
-    validateTest(t, i, path);
+  if (candidate.tests !== undefined) {
+    if (!Array.isArray(candidate.tests)) {
+      throw new Error(`Prelight config at ${path} must declare a 'tests' array.`);
+    }
+    for (const [i, t] of candidate.tests.entries()) {
+      validateTest(t, i, path);
+    }
+  }
+  if (candidate.layouts !== undefined) {
+    if (!Array.isArray(candidate.layouts)) {
+      throw new Error(`Prelight config at ${path} must declare 'layouts' as an array.`);
+    }
+    for (const [i, l] of candidate.layouts.entries()) {
+      validateLayout(l, i, path);
+    }
   }
   return candidate;
 }
@@ -89,16 +133,31 @@ function validateTest(test: PrelightTest, index: number, path: string): void {
   if (!test.name || typeof test.name !== 'string') {
     throw new Error(`${path}:${loc}.name must be a non-empty string.`);
   }
-  if (typeof test.font !== 'string') {
-    throw new Error(`${path}:${loc}.font must be a CSS font shorthand string.`);
-  }
-  if (typeof test.maxWidth !== 'number' || test.maxWidth <= 0) {
-    throw new Error(`${path}:${loc}.maxWidth must be a positive number.`);
-  }
-  if (typeof test.lineHeight !== 'number' || test.lineHeight <= 0) {
-    throw new Error(`${path}:${loc}.lineHeight must be a positive number.`);
+  if (test.autoResolve !== true) {
+    if (typeof test.font !== 'string') {
+      throw new Error(`${path}:${loc}.font must be a CSS font shorthand string.`);
+    }
+    if (typeof test.maxWidth !== 'number' || test.maxWidth <= 0) {
+      throw new Error(`${path}:${loc}.maxWidth must be a positive number.`);
+    }
+    if (typeof test.lineHeight !== 'number' || test.lineHeight <= 0) {
+      throw new Error(`${path}:${loc}.lineHeight must be a positive number.`);
+    }
   }
   if (!test.constraints || typeof test.constraints !== 'object') {
     throw new Error(`${path}:${loc}.constraints must be an object.`);
+  }
+}
+
+function validateLayout(layout: PrelightLayoutTest, index: number, path: string): void {
+  const loc = `layouts[${index}]`;
+  if (!layout.name || typeof layout.name !== 'string') {
+    throw new Error(`${path}:${loc}.name must be a non-empty string.`);
+  }
+  if (!['flex', 'block', 'aspect'].includes(layout.kind)) {
+    throw new Error(`${path}:${loc}.kind must be one of "flex" | "block" | "aspect".`);
+  }
+  if (!layout.spec || typeof layout.spec !== 'object') {
+    throw new Error(`${path}:${loc}.spec must be an object.`);
   }
 }

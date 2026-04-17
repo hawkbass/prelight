@@ -492,8 +492,10 @@ Layered, mirroring F2's structure:
 These subsets live outside `corpus/fonts/` on purpose — they're only
 valid for the corpus strings. Consumers who need production CJK
 accuracy should bundle the full Noto Sans JP / CJK variable font (~10-
-20 MB) with their app and `loadBundledFont` it. `PRELIGHT-NEXT(v0.2)`
-is to expose `measurementFonts` as part of `VerifySpec`.
+20 MB) with their app and `loadBundledFont` it. `PRELIGHT-NEXT(v0.3)`
+is to expose `measurementFonts` as part of `VerifySpec` (deferred from
+v0.2 — the `setCJKMeasurementFamilies` / `getCJKMeasurementFamilies`
+pair is sufficient for v0.2 consumers and is what ground-truth uses).
 
 ### Shim selector logic
 
@@ -720,13 +722,15 @@ shapes:
 - **Release-gate floor lowered** to 88% on emoji (measured 90%) and
   93% overall. DECISIONS #008 updated. `PER_ENGINE_FLOORS` in
   `ground-truth/run.ts` updated.
-- **PRELIGHT-NEXT(v0.2)**: `VerifySpec.measurementFonts` option will
+- **PRELIGHT-NEXT(v0.3)**: `VerifySpec.measurementFonts` option will
   let consumers point the canvas backend at their app's emoji face.
   When both sides use the same face, emoji agreement should
   converge toward 100% by the same mechanism F2/F3 used for Arabic
   and CJK. Today, a user can call
   `loadBundledFont(path, 'Noto Color Emoji')` and register it as a
-  measurement family manually; v0.2 will make this first-class.
+  measurement family manually; v0.3 will make this first-class.
+  (Deferred from v0.2: the v0.2 roadmap was saturated with structural
+  primitives G1–G7; this is an additive v0.3 enhancement.)
 - **Regression guard.** The corpus expansion means any future
   Prelight change that breaks grapheme-cluster handling (e.g., a
   bad ZWJ-segment bug in a Pretext upgrade) will show up as dozens

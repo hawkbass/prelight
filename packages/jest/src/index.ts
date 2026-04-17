@@ -11,7 +11,7 @@
  *
  * Uses a top-level await on `ensureCanvasEnv`. Jest ESM mode required
  * (`--experimental-vm-modules` or `"type": "module"`). CJS consumers should
- * import from `@prelight/jest/cjs` (not yet shipped — PRELIGHT-NEXT(v0.2)).
+ * import from `@prelight/jest/cjs` (not yet shipped — PRELIGHT-NEXT(v0.3)).
  */
 
 import { ensureCanvasEnv } from '@prelight/core';

@@ -39,3 +39,44 @@ export {
   getCJKMeasurementFamilies,
   setCJKMeasurementFamilies,
 } from './shape/cjk.js';
+export {
+  addInsets,
+  all as edgeInsetsAll,
+  box,
+  contentWidthFromBorderBox,
+  horizontalInset,
+  only as edgeInsetsOnly,
+  parseEdgeInsets,
+  symmetric as edgeInsetsSymmetric,
+  verticalInset,
+  zeroInsets,
+} from './layout/box.js';
+export type { Box, BoxSpec, EdgeInsets } from './layout/box.js';
+export { computeFlexLayout, fitsFlex } from './layout/flex.js';
+export { collapseMargins, computeBlockLayout, fitsBlock } from './layout/block.js';
+export { aspectFit, fitsAspect } from './layout/aspect.js';
+export type {
+  AspectLayout,
+  FitsAspectResult,
+  FitsAspectSpec,
+  IntrinsicImage,
+  ObjectFit,
+  Slot,
+} from './layout/aspect.js';
+export type {
+  BlockChildLayout,
+  BlockContainer,
+  BlockLayout,
+  FitsBlockResult,
+  FitsBlockSpec,
+} from './layout/block.js';
+export type {
+  FitsFlexResult,
+  FitsFlexSpec,
+  FlexContainer,
+  FlexDirection,
+  FlexItem,
+  FlexItemLayout,
+  FlexJustify,
+  FlexLayout,
+} from './layout/flex.js';

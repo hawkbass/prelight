@@ -13,8 +13,12 @@
  *   - Multi-slot verification. v0.1 treats the rendered output as one text
  *     blob. v0.2 will add slot markers.
  *
- * PRELIGHT-NEXT(v0.2): slot markers for multi-slot components.
- * PRELIGHT-NEXT(v0.2): CSS-in-JS plugin hook (emotion, styled-components).
+ * PRELIGHT-NEXT(v0.3): slot markers for multi-slot components
+ *   (deferred from v0.2; see ROADMAP.md).
+ * PRELIGHT-NEXT(v0.3): emotion + styled-components StyleResolver
+ *   plugins. The v0.2 `resolveStyles()` surface already accepts
+ *   them; the plugins themselves need a runtime probe and are
+ *   tracked separately.
  * PRELIGHT-NEXT(v1.0): full style resolution via Presize.
  */
 

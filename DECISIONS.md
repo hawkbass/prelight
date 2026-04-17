@@ -356,3 +356,78 @@ to verify in `measure-bundle` / `ground-truth`.
 pushes past 11 KB min, budget gets revisited under DECISIONS #014's
 review cadence, not silently bumped. Phase G8 is the next planned
 deliberate increase (14 KB min / 6 KB gz per the plan).
+
+---
+
+## 017 — Structural primitives live in `@prelight/core`, not a subpackage
+
+**Date**: 2026-04-16
+**Status**: Accepted
+**Context**: G2-G5 add box model + flex + block + aspect primitives
+to Prelight. The natural alternative was a separate
+`@prelight/layout` package so users who only want text verification
+never pay for the structural surface.
+**Decision**: Ship them in `@prelight/core` under
+`packages/core/src/layout/{box,flex,block,aspect}.ts`, re-exported
+from the package root.
+**Rationale**:
+
+1. **One predicate API.** `verify()` and the new `fitsFlex` /
+   `fitsBlock` / `fitsAspect` return the same shape
+   (`{ ok, reasons|failures, layout? }`). Splitting them across
+   packages means the Vitest / Jest / CLI surfaces need to import
+   from two places, and user docs need to explain which package a
+   given matcher comes from.
+2. **Tree-shakability wins it back.** The layout modules are pure
+   `export` functions with no module-level side effects.
+   `measure-bundle.ts` sweeps prove the cost is real only for
+   callers that actually import them: core grew from 6.20 KB to
+   16.79 KB min / 2.61 KB to 6.63 KB gz, but the minimum user-
+   surface cost (`verify` alone) is effectively unchanged once a
+   bundler strips unused exports.
+3. **No versioning drift.** A `@prelight/layout` package would
+   need its own release cadence, its own CHANGELOG, its own
+   `peerDependencies` on `@prelight/core`. For a 3 KB engine, the
+   overhead dwarfs the benefit.
+
+**Invalidation**: if we later learn the common case is a bundler
+that doesn't tree-shake (browser `<script type=module>` direct
+imports, say), we split `@prelight/core-text` vs
+`@prelight/core-layout` without changing the public API — consumers
+just import from different entry points. Public type names are
+already split by file, so this is a mechanical move.
+
+---
+
+## 018 — CLI reporter colouring is one file, zero deps
+
+**Date**: 2026-04-16
+**Status**: Accepted
+**Context**: G7 adds TTY-aware colouring to the terminal reporter.
+Three realistic options: (a) take a dependency on
+[`picocolors`](https://github.com/alexeyraspopov/picocolors), (b)
+take a dependency on [`chalk`](https://github.com/chalk/chalk), or
+(c) write the decision table ourselves.
+**Decision**: Write it ourselves in
+`packages/cli/src/color.ts` (~120 lines, 2 palettes, 1 decision
+table) and keep the CLI at **zero production dependencies** except
+for its workspace siblings.
+**Rationale**:
+
+1. **Budget.** `picocolors` ships ~1.1 KB min / 550 B gz; `chalk@5`
+   ships ~5 KB min. The CLI's entire G7 addition is ~420 B gz. We
+   pay less than a single dep would have cost.
+2. **Exactness.** `NO_COLOR`, `FORCE_COLOR`, `FORCE_COLOR=0` have
+   specific precedence rules we want to test by the table, not by
+   whatever library version is resolved. Owning the file means the
+   precedence is a unit test, not a version bump away from
+   breaking.
+3. **Policy.** Prelight's thesis is that fast, DOM-free measurement
+   gets us back under-budget where other tooling has bloated. If
+   the CLI starts adding 2 KB deps for colouring, the thesis
+   erodes.
+
+**Invalidation**: if we ever need 256-colour / truecolour output,
+a live-TTY spinner, or Windows-specific stream detection beyond
+`isTTY`, the complexity crosses the threshold where
+`picocolors` (still dep-free itself) becomes the honest choice.

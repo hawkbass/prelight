@@ -5,10 +5,13 @@ joining Prelight mid-stream. This file is the map; the territory is the code.
 
 ## What Prelight is
 
-A static, DOM-free text-layout verifier. You give it a string, a font, a slot
-width, and a set of predicates; it tells you whether the text fits — pass or
-fail — at every (language, fontScale) cell in the matrix. No browser, no
-screenshots, no flake.
+A static, DOM-free layout verifier. For text: you give it a string, a font,
+a slot width, and a set of predicates; it tells you whether the text fits —
+pass or fail — at every (language, fontScale) cell in the matrix. For
+structural layout (v0.2): a box-model `Box`, a single-axis flex engine
+(`fitsFlex`), a block-flow engine with margin collapse (`fitsBlock`), and
+an image aspect-ratio engine (`fitsAspect`) — all pure, all DOM-free. No
+browser, no screenshots, no flake.
 
 - Marketing one-liner: "Verify your UI before the browser runs it."
 - Core thesis: `site/thesis.md`.
@@ -43,8 +46,10 @@ posts must be backed by a reproducible artifact in the repo.
 
 - "23× faster than Playwright" ← `demos/speed-comparison/RESULTS.md`
 - "94.5% / 94.7% / 94.3% overall, ≥ 97.9% non-emoji on Chromium / WebKit / Firefox across 928 cases" ← `ground-truth/run.ts --strict --browser all`
-- "~16.4 KB total shipped across five packages" ← `bun run measure-bundle` (grew from 13.2 KB in F2+F3 for the RTL + CJK correction shims; budget in `scripts/bundle-budget.json`)
+- "~33 KB min / ~13 KB gz total shipped across five packages" (v0.2; was ~16.4 KB post-F3, ~13.2 KB at end-of-Phase-E; grew with G1–G7 structural primitives + style-resolver + colour layer) ← `bun run measure-bundle`; budget in `scripts/bundle-budget.json`, policy in DECISIONS #014, #017, and #018
 - Any predicate behavior ← `packages/core/test/*.test.ts`
+- Any structural layout behavior ← `packages/core/test/{box,flex,block,aspect}.test.ts` (120 cases)
+- Any style-resolver behavior ← `packages/react/test/resolve-styles.test.tsx` (50 cases)
 
 If you change a number, update the artifact in the same commit. If you
 cannot reproduce a number, remove the claim — do not soften it.
@@ -68,7 +73,7 @@ cannot reproduce a number, remove the claim — do not soften it.
 bun install                 # one-time
 bun run typecheck           # every package
 bun run build               # every package
-bun run test                # 74 tests, ~3s
+bun run test                # 254 tests (v0.2), ~3s
 bun run measure-bundle      # quick size check
 ```
 
@@ -104,13 +109,20 @@ bun run measure-bundle:update       # legitimate growth: update the budget
 `scripts/bundle-budget.json` is part of the source of truth. A PR that grows
 the shipped code should grow the budget in the same diff.
 
-## Non-goals for v0.1 (will be rejected in review)
+## Non-goals for v0.2 (will be rejected in review)
 
-- Flex/grid intrinsic sizing verification — Presize, v1.0.
-- CSS cascade resolution — v1.0.
-- WebKit/Firefox ground-truth sweeps — scheduled, not v0.1.
-- Runtime pre-render guards — v0.2.
-- JSX-in-config reactive re-verification — v0.2.
+- Grid layout engine — Presize, v1.0.
+- Positioned elements (`absolute`, `fixed`) — v1.1.
+- Full CSS cascade resolution — v1.0. (v0.2 ships `resolveStyles()`
+  which handles inline styles + CSS variables; it does not follow
+  stylesheet rules or specificity.)
+- Flex-wrap (multi-line flex) — v0.3.
+- Cross-axis `align-items: stretch / baseline` — v0.3.
+- Runtime pre-render guards — v2.0.
+- JSX-in-config reactive re-verification — v0.3+.
+- emotion / styled-components StyleResolver plugins — v0.3 (the
+  plugin contract is already in `@prelight/react`; runtime probes
+  land in v0.3).
 
 Search for `PRELIGHT-NEXT(v...)` to find the exact annotations.
 

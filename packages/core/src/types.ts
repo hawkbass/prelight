@@ -27,8 +27,10 @@ export type FontScale = number;
 /**
  * Predicate set exposed to users. Each field is independently optional.
  *
- * PRELIGHT-NEXT(v0.2): add structural predicates (fitsFlex, fitsGrid) once
- * Presize lands. Additive only — existing predicate semantics are frozen.
+ * PRELIGHT-NEXT(v1.0): add `fitsGrid` once the grid engine lands in
+ * Presize. Additive only — existing predicate semantics are frozen.
+ * (fitsFlex / fitsBlock / fitsAspect shipped in v0.2; see
+ * packages/core/src/layout/*.ts.)
  */
 export interface Constraints {
   /** Exact line count. Mutually exclusive with maxLines/minLines. */

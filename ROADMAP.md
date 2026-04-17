@@ -64,8 +64,14 @@ Each entry tagged with a `PRELIGHT-NEXT` marker in the codebase.
 
 | Marker | Item | Target |
 | --- | --- | --- |
-| `PRELIGHT-NEXT(v0.2)` | Flex container fit check | v0.2 |
-| `PRELIGHT-NEXT(v0.2)` | Image slot overflow | v0.2 |
+| `PRELIGHT-NEXT(v0.2)` | `resolveStyles()` + StyleResolver plugin surface | **v0.2 (G1 shipped 2026-04-16)** |
+| `PRELIGHT-NEXT(v0.2)` | `Box` + `EdgeInsets` primitives (padding / border / margin) | **v0.2 (G2 shipped 2026-04-16)** |
+| `PRELIGHT-NEXT(v0.2)` | Flex container fit check | **v0.2 (G3 shipped 2026-04-16)** |
+| `PRELIGHT-NEXT(v0.2)` | Block flow + adjacent-sibling margin collapse | **v0.2 (G4 shipped 2026-04-16)** |
+| `PRELIGHT-NEXT(v0.2)` | Image slot overflow | **v0.2 (G5 shipped 2026-04-16)** |
+| `PRELIGHT-NEXT(v0.2)` | TTY-aware CLI reporter with NO_COLOR / FORCE_COLOR | **v0.2 (G7 shipped 2026-04-16)** |
+| `PRELIGHT-NEXT(v0.3)` | Slot markers for multi-slot components | v0.3 |
+| `PRELIGHT-NEXT(v0.3)` | emotion + styled-components StyleResolver plugins | v0.3 |
 | `PRELIGHT-NEXT(v1.0)` | Grid layout engine | v1.0 |
 | `PRELIGHT-NEXT(v1.0)` | `white-space: pre-wrap` handling | v1.0 |
 | `PRELIGHT-NEXT(v1.0)` | Shaping for Arabic ligatures (beyond Pretext's current fidelity) | v1.0 |
