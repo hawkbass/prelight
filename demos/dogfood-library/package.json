@@ -1,0 +1,22 @@
+{
+  "name": "demo-dogfood-library",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Three to five realistic components, a prelight.config.ts, and a GitHub Actions workflow showing Prelight as a CI gate.",
+  "type": "module",
+  "scripts": {
+    "prelight": "prelight",
+    "test": "prelight --fail-fast"
+  },
+  "dependencies": {
+    "@prelight/cli": "workspace:*",
+    "@prelight/core": "workspace:*",
+    "@prelight/react": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,32 @@
+node_modules/
+dist/
+build/
+coverage/
+.turbo/
+.cache/
+.next/
+.vite/
+*.log
+*.tsbuildinfo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Playwright
+playwright-report/
+test-results/
+
+# Screenshots from ground-truth diffs (keep only goldens in-repo, diffs ignored)
+ground-truth/diffs/

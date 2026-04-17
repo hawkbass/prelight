@@ -1,0 +1,114 @@
+name: Ubuntu full-stack
+
+# F5 — the single source of truth that a Prelight release candidate is
+# healthy end-to-end on Linux. Runs the full matrix of signals in one
+# job so we can read "green ubuntu-full" as "everything that we claim
+# we test, tested together on a fresh runner".
+#
+# Why a separate workflow rather than a new job on ci.yml:
+# - It uses the same Ubuntu runner but installs Playwright browsers
+#   and Noto fonts, which are heavy and not needed for pure unit-test
+#   runs. Keeping ci.yml lean means PR feedback stays fast.
+# - Scheduled weekly in addition to push/PR to catch "bit-rot" from
+#   browser upgrades, font updates, and Ubuntu image changes.
+# - F7 (v0.1.x release candidate) gates on this workflow being green;
+#   see DECISIONS #008.
+on:
+  # Only runs on push-to-main + weekly schedule + manual dispatch.
+  # PRs get coverage from ci.yml (cross-OS tests + bundle budget) and
+  # ground-truth.yml (corpus agreement). This workflow is the
+  # post-merge / scheduled "the full bill of goods actually passed"
+  # signal, plus the manually-invoked release-candidate gate for F7.
+  push:
+    branches: [main]
+  schedule:
+    # Weekly, Monday 06:00 UTC — early enough to catch drift over the
+    # weekend's browser auto-updates, late enough that Friday's main
+    # is already stable.
+    - cron: '0 6 * * 1'
+  workflow_dispatch: {}
+
+jobs:
+  full-stack:
+    name: tests + bench + bundle + ground-truth (ubuntu)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run --filter='./packages/*' typecheck
+
+      - name: Build
+        run: bun run --filter='./packages/*' build
+
+      - name: Test (all packages)
+        run: bun run --filter='./packages/*' test
+
+      - name: Bundle budget (strict)
+        # Fails the job if any `@prelight/*` package blew past its
+        # published bundle ceiling. Numbers come from
+        # `scripts/bundle-budget.json`.
+        run: bun run measure-bundle:strict
+
+      - name: Install Playwright browsers (Chromium + WebKit + Firefox)
+        # Install all three engines with their system dependencies so
+        # `ground-truth --browser all` works unchanged. WebKit is the
+        # heaviest install — ~200 MB of libs — but caching it isn't
+        # worth the maintenance overhead on the scheduled run.
+        run: npx --yes playwright install --with-deps chromium webkit firefox
+        working-directory: ground-truth
+
+      - name: Ground-truth (strict, all engines)
+        # The release gate. Per-engine × per-language floors in
+        # DECISIONS #008; regression below any floor fails this step
+        # and blocks the RC.
+        run: npx tsx run.ts --strict --browser all
+        working-directory: ground-truth
+
+      - name: Speed comparison bench
+        # Regression-detect the 23× claim. Runs Prelight vs.
+        # Playwright DOM measurement for 10 iterations (reduced from
+        # the local 50) to keep CI time reasonable while still
+        # catching order-of-magnitude drift.
+        run: npx tsx bench.ts --iterations=10 --json > bench.json
+        working-directory: demos/speed-comparison
+
+      - name: Inspect bench result
+        # Surface the numbers in the job log and guard the 10× floor —
+        # we don't police the exact speedup, only that Prelight is still
+        # decisively faster than a real browser round-trip. `speedup`
+        # is null when Playwright itself failed to launch; treat that
+        # as a hard CI failure rather than a soft skip, because the
+        # Ubuntu runner installed Chromium two steps earlier.
+        run: |
+          cat demos/speed-comparison/bench.json
+          ratio=$(node -e "const r=require('./demos/speed-comparison/bench.json'); process.stdout.write(String(r.speedup ?? 'null'))")
+          echo "measured ratio: $ratio"
+          if [ "$ratio" = "null" ]; then
+            echo "bench did not produce a speedup; Playwright launch failed."
+            exit 1
+          fi
+          awk -v r="$ratio" 'BEGIN { if (r+0 < 10) { print "speedup below 10× floor"; exit 1 } }'
+
+      - name: Upload ground-truth + bench artifacts on failure
+        if: failure()
+        run: |
+          mkdir -p _artifacts
+          cp -f ground-truth/cross-engine-2026-04-16.json _artifacts/ || true
+          cp -f demos/speed-comparison/bench.json _artifacts/ || true
+          npx tsx ground-truth/run.ts --json --browser all > _artifacts/ground-truth-fresh.json || true
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: ubuntu-full-report
+          path: _artifacts

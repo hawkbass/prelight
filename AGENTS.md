@@ -1,0 +1,146 @@
+# AGENTS.md
+
+Orientation for AI agents (Claude, Cursor, Codex) and new human contributors
+joining Prelight mid-stream. This file is the map; the territory is the code.
+
+## What Prelight is
+
+A static, DOM-free text-layout verifier. You give it a string, a font, a slot
+width, and a set of predicates; it tells you whether the text fits — pass or
+fail — at every (language, fontScale) cell in the matrix. No browser, no
+screenshots, no flake.
+
+- Marketing one-liner: "Verify your UI before the browser runs it."
+- Core thesis: `site/thesis.md`.
+- Public surface: `@prelight/core`, `@prelight/react`, `@prelight/vitest`,
+  `@prelight/jest`, `@prelight/cli`.
+
+## Repository layout
+
+```
+prelight/
+├── packages/
+│   ├── core/         # the verifier, predicates, Pretext wrapper, canvas shim
+│   ├── react/        # renderToStaticMarkup → text extraction → verify
+│   ├── vitest/       # expect(…).toLayout({ … })
+│   ├── jest/         # same matcher, Jest ESM mode
+│   └── cli/          # `prelight` binary + config loader + reporter
+├── demos/
+│   ├── failing-german-button/   # Vitest suite with a deliberate failure
+│   ├── dogfood-library/         # 7-component config exercising the CLI
+│   └── speed-comparison/        # Prelight vs. Playwright, 50 iter/side
+├── corpus/           # i18n strings + bundled Inter Variable v4.1
+├── ground-truth/     # Playwright-driven oracle against real Chromium
+├── site/             # landing page, thesis, playground
+├── scripts/          # bundle measurement, probes
+└── .github/workflows # ci.yml, ground-truth.yml, prelight-dogfood.yml
+```
+
+## The evidence invariant
+
+Anything Prelight claims in README, thesis, site, launch copy, or social
+posts must be backed by a reproducible artifact in the repo.
+
+- "23× faster than Playwright" ← `demos/speed-comparison/RESULTS.md`
+- "94.5% / 94.7% / 94.3% overall, ≥ 97.9% non-emoji on Chromium / WebKit / Firefox across 928 cases" ← `ground-truth/run.ts --strict --browser all`
+- "~16.4 KB total shipped across five packages" ← `bun run measure-bundle` (grew from 13.2 KB in F2+F3 for the RTL + CJK correction shims; budget in `scripts/bundle-budget.json`)
+- Any predicate behavior ← `packages/core/test/*.test.ts`
+
+If you change a number, update the artifact in the same commit. If you
+cannot reproduce a number, remove the claim — do not soften it.
+
+## Governance files (read these before making design changes)
+
+| File              | Purpose                                                    |
+| ----------------- | ---------------------------------------------------------- |
+| `ROADMAP.md`      | `PRELIGHT-NEXT` index; v0.2 and v1.0 scope                 |
+| `DECISIONS.md`    | ADR-lite log; append-only except for supersession notes    |
+| `FINDINGS.md`     | Dated empirical results; append-only                       |
+| `CONTRIBUTING.md` | dev loop, coding conventions, PR checklist                 |
+| `SECURITY.md`     | disclosure policy                                          |
+| `LAUNCH.md`       | staged launch plan (HN, X/Twitter, release notes)          |
+
+## Common tasks
+
+### Dev loop
+
+```bash
+bun install                 # one-time
+bun run typecheck           # every package
+bun run build               # every package
+bun run test                # 74 tests, ~3s
+bun run measure-bundle      # quick size check
+```
+
+### Ground-truth (requires Playwright + Chromium)
+
+```bash
+cd ground-truth
+bun install                                   # one-time
+npx playwright install --with-deps chromium   # one-time
+bun run check                                 # informational
+bun run check:strict                          # CI gate
+```
+
+Ground-truth runs under `tsx` on Node (ADR 013), not Bun, because of a Bun
+WebSocket-client quirk on Windows.
+
+### Speed comparison
+
+```bash
+cd demos/speed-comparison
+npx tsx bench.ts --iterations=50        # human-readable
+npx tsx bench.ts --iterations=50 --json # machine-readable
+```
+
+### Bundle budget
+
+```bash
+bun run measure-bundle              # report current sizes
+bun run measure-bundle:strict       # fail if over budget (CI uses this)
+bun run measure-bundle:update       # legitimate growth: update the budget
+```
+
+`scripts/bundle-budget.json` is part of the source of truth. A PR that grows
+the shipped code should grow the budget in the same diff.
+
+## Non-goals for v0.1 (will be rejected in review)
+
+- Flex/grid intrinsic sizing verification — Presize, v1.0.
+- CSS cascade resolution — v1.0.
+- WebKit/Firefox ground-truth sweeps — scheduled, not v0.1.
+- Runtime pre-render guards — v0.2.
+- JSX-in-config reactive re-verification — v0.2.
+
+Search for `PRELIGHT-NEXT(v...)` to find the exact annotations.
+
+## Platform caveats
+
+- **Windows + Defender** can block Playwright's default pipe-based CDP
+  transport; ground-truth and the benchmark use a manual Chromium spawn
+  and WebSocket CDP instead. See ADR 012. Do not revert without that
+  ADR being superseded.
+- **Bun WebSocket client** on Windows cannot connect to Chromium's CDP
+  WebSocket endpoint reliably; ground-truth and the benchmark run via
+  `tsx` on Node. See ADR 013.
+
+## How to add a new package
+
+1. Scaffold `packages/<name>/` with `package.json`, `tsconfig.json`,
+   `src/`, `test/`, `README.md`, and a copy of the root `LICENSE`.
+2. Add to the root `package.json` `workspaces` array.
+3. Add a `scripts/bundle-budget.json` entry and a `TARGETS` entry in
+   `scripts/measure-bundle.ts`.
+4. Update this file's repository layout section.
+5. Update `CHANGELOG.md` under `[Unreleased]`.
+
+## How to make a claim
+
+If you want to write a number in the README, on the site, in launch copy,
+or in a tweet:
+
+1. Reproduce it locally with the command referenced in this file.
+2. Write it with the version/date context (e.g. "as of 2026-04-16 on
+   Windows 10.0.26200, Bun 1.3.11").
+3. Link from the claim to the artifact (RESULTS.md, FINDINGS.md, etc.).
+4. If the number moves, update every occurrence in the same commit.

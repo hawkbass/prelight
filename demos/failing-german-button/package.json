@@ -1,0 +1,23 @@
+{
+  "name": "demo-failing-german-button",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The opening act. A Button component, a Vitest test, and a failure message that teaches what Prelight is.",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@prelight/core": "workspace:*",
+    "@prelight/react": "workspace:*",
+    "@prelight/vitest": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  }
+}

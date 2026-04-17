@@ -1,0 +1,19 @@
+# Normalize line endings across Windows/macOS/Linux contributors.
+# Prelight is developed on Windows initially; this prevents LF/CRLF churn.
+* text=auto eol=lf
+
+# Binary assets
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+
+# Lockfiles as text for readable diffs
+bun.lock text eol=lf
+package-lock.json text eol=lf

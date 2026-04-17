@@ -1,0 +1,16 @@
+# Bun runtime configuration for the Prelight monorepo.
+#
+# We intentionally keep this minimal. Everything a contributor needs to know
+# lives in DEVELOPMENT.md. Only add here what cannot be expressed in
+# package.json.
+
+[install]
+# Hoist workspace deps so Vitest, Playwright, etc. resolve from the root.
+# Bun already does this by default; pinned for clarity.
+hoist = true
+
+[test]
+# Bun has a built-in test runner, but we use Vitest for unit tests so the
+# matcher package can be tested against real Vitest semantics. Bun's runner
+# stays available for quick smoke tests.
+preload = []

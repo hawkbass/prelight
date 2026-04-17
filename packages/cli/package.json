@@ -1,0 +1,41 @@
+{
+  "name": "@prelight/cli",
+  "version": "0.0.0",
+  "description": "Config-driven CLI for Prelight. `prelight` runs your layout verification matrix in CI.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/cli.js",
+  "types": "./dist/cli.d.ts",
+  "bin": {
+    "prelight": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@prelight/core": "workspace:*",
+    "@prelight/react": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "cli",
+    "layout",
+    "verification",
+    "ci"
+  ]
+}

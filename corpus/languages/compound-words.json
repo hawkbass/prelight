@@ -1,0 +1,15 @@
+{
+  "code": "compound-words",
+  "name": "Compound word stress set",
+  "direction": "ltr",
+  "source": "Sourced from public dictionaries of German, Finnish, and Hungarian.",
+  "notes": "These are single unbreakable tokens. A verifier that only checks space-broken line widths misses them. This file exists to make sure Prelight doesn't.",
+  "strings": {
+    "de_medium": "Datenschutzbestimmungen",
+    "de_long": "Rechtsschutzversicherungsgesellschaften",
+    "de_extreme": "Grundstücksverkehrsgenehmigungszuständigkeitsübertragungsverordnung",
+    "fi_long": "lentokonesuihkuturbiinimoottoriapumekaanikkoaliupseerioppilas",
+    "hu_long": "megszentségteleníthetetlenségeskedéseitekért",
+    "technical_url_like": "com.example.app.feature.settings.advanced.telemetry.preferences"
+  }
+}

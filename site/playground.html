@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Prelight playground</title>
+    <style>
+      :root {
+        --fg: #111;
+        --fg-soft: #555;
+        --bg: #fff;
+        --accent: #0a7;
+        --bad: #c00;
+        --good: #0a7;
+        --border: #e5e5e3;
+        --panel: #fafaf9;
+        font-family: ui-sans-serif, system-ui, Segoe UI, Inter, sans-serif;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --fg: #eee;
+          --fg-soft: #999;
+          --bg: #0a0a0a;
+          --accent: #4fd;
+          --bad: #f77;
+          --good: #4fd;
+          --border: #222;
+          --panel: #141414;
+        }
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: var(--bg);
+        color: var(--fg);
+      }
+      main {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 40px 24px;
+      }
+      h1 {
+        margin: 0 0 8px;
+      }
+      p.sub {
+        margin: 0 0 28px;
+        color: var(--fg-soft);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+      }
+      @media (max-width: 720px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      label {
+        display: block;
+        font-size: 0.88rem;
+        color: var(--fg-soft);
+        margin: 0 0 6px;
+      }
+      input,
+      textarea,
+      select {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 8px 10px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--panel);
+        color: var(--fg);
+        font: inherit;
+        font-size: 0.95rem;
+      }
+      textarea {
+        min-height: 120px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      .stage {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 16px;
+        background: var(--panel);
+        position: relative;
+      }
+      .slot {
+        border: 1px dashed var(--border);
+        padding: 2px;
+        word-wrap: break-word;
+      }
+      .verdict {
+        margin-top: 12px;
+        padding: 10px 12px;
+        border-radius: 6px;
+        font-size: 0.92rem;
+      }
+      .verdict.ok {
+        color: var(--good);
+        border: 1px solid var(--good);
+      }
+      .verdict.fail {
+        color: var(--bad);
+        border: 1px solid var(--bad);
+      }
+      .verdict pre {
+        white-space: pre-wrap;
+        margin: 8px 0 0;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.85rem;
+      }
+      footer {
+        margin-top: 48px;
+        color: var(--fg-soft);
+        font-size: 0.85rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Playground</h1>
+      <p class="sub">
+        Type a string. Pick a font, a slot width, and some predicates. The browser
+        runs Pretext directly (no Prelight adapter layer — this is the math at
+        street level).
+      </p>
+
+      <div class="grid">
+        <div>
+          <label for="text">Text</label>
+          <textarea id="text">Rechtsschutzversicherungsgesellschaften</textarea>
+          <div class="row" style="margin-top: 12px">
+            <div>
+              <label for="font">Font (CSS shorthand)</label>
+              <input id="font" value="16px sans-serif" />
+            </div>
+            <div>
+              <label for="maxWidth">Max width (px)</label>
+              <input id="maxWidth" type="number" value="140" />
+            </div>
+          </div>
+          <div class="row" style="margin-top: 12px">
+            <div>
+              <label for="lineHeight">Line height (px)</label>
+              <input id="lineHeight" type="number" value="20" />
+            </div>
+            <div>
+              <label for="scale">Font scale</label>
+              <input id="scale" type="number" value="1" step="0.25" />
+            </div>
+          </div>
+          <div class="row" style="margin-top: 12px">
+            <div>
+              <label for="maxLines">Max lines (0 = no constraint)</label>
+              <input id="maxLines" type="number" value="1" />
+            </div>
+            <div>
+              <label>
+                <input id="noOverflow" type="checkbox" checked /> No overflow
+              </label>
+            </div>
+          </div>
+        </div>
+        <div>
+          <label>Stage (browser native, for eyeballing)</label>
+          <div class="stage">
+            <div id="slot" class="slot">&nbsp;</div>
+          </div>
+          <div id="verdict" class="verdict">…</div>
+        </div>
+      </div>
+      <footer>
+        Uses <code>@chenglou/pretext</code> directly in the browser. Prelight's
+        verifier is the same arithmetic wrapped in a predicate evaluator.
+      </footer>
+    </main>
+
+    <script type="module">
+      // Load pretext from a CDN so the playground has no build step.
+      const { prepare, prepareWithSegments, layout, layoutWithLines } =
+        await import('https://esm.sh/@chenglou/pretext@0.0.3');
+
+      const $ = (id) => document.getElementById(id);
+      const ids = [
+        'text',
+        'font',
+        'maxWidth',
+        'lineHeight',
+        'scale',
+        'maxLines',
+        'noOverflow',
+      ];
+      for (const id of ids) $(id).addEventListener('input', update);
+      update();
+
+      function scaleFont(font, scale) {
+        return font.replace(/(-?\d*\.?\d+)px/, (_, n) => `${parseFloat(n) * scale}px`);
+      }
+
+      function update() {
+        const text = $('text').value;
+        const baseFont = $('font').value;
+        const maxWidth = parseInt($('maxWidth').value, 10);
+        const baseLH = parseInt($('lineHeight').value, 10);
+        const scale = parseFloat($('scale').value) || 1;
+        const maxLines = parseInt($('maxLines').value, 10) || 0;
+        const noOverflow = $('noOverflow').checked;
+        const font = scaleFont(baseFont, scale);
+        const lineHeight = baseLH * scale;
+
+        const slot = $('slot');
+        slot.style.width = maxWidth + 'px';
+        slot.style.font = font;
+        slot.style.lineHeight = lineHeight + 'px';
+        slot.textContent = text;
+
+        const prepared = prepareWithSegments(text, font);
+        const laid = layoutWithLines(prepared, maxWidth, lineHeight);
+        const natural = layoutWithLines(
+          prepareWithSegments(text, font),
+          1e9,
+          lineHeight,
+        );
+        const naturalWidth = natural.lines[0] ? natural.lines[0].width : 0;
+        const overflows = naturalWidth > maxWidth + 0.5;
+
+        const failures = [];
+        if (noOverflow && overflows) {
+          failures.push(
+            `noOverflow: natural width ${naturalWidth.toFixed(1)}px > ${maxWidth}px slot`,
+          );
+        }
+        if (maxLines > 0 && laid.lineCount > maxLines) {
+          failures.push(`maxLines: wraps to ${laid.lineCount} (> ${maxLines})`);
+        }
+
+        const v = $('verdict');
+        if (failures.length === 0) {
+          v.className = 'verdict ok';
+          v.innerHTML = `✓ fits — ${laid.lineCount} line${laid.lineCount === 1 ? '' : 's'}, ${laid.height.toFixed(0)}px tall`;
+        } else {
+          v.className = 'verdict fail';
+          v.innerHTML = `✗ fails<pre>${failures.join('\n')}</pre>`;
+        }
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,33 @@
+{
+  "name": "prelight-monorepo",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Static layout verification for the web. Prelight catches layout bugs before the browser ever runs.",
+  "license": "MIT",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "demos/failing-german-button",
+    "demos/dogfood-library",
+    "demos/speed-comparison",
+    "ground-truth",
+    "site",
+    "corpus"
+  ],
+  "scripts": {
+    "build": "bun run --filter='./packages/*' build",
+    "typecheck": "bun run --filter='./packages/*' typecheck",
+    "test": "bun run --filter='./packages/*' test",
+    "test:core": "bun run --filter='@prelight/core' test",
+    "ground-truth": "bun run --filter='ground-truth' test",
+    "demos": "bun run --filter='./demos/*' test",
+    "measure-bundle": "bun scripts/measure-bundle.ts",
+    "measure-bundle:strict": "bun scripts/measure-bundle.ts --strict",
+    "measure-bundle:update": "bun scripts/measure-bundle.ts --update-budget"
+  },
+  "engines": {
+    "bun": ">=1.3.0",
+    "node": ">=20.0.0"
+  },
+  "packageManager": "bun@1.3.11"
+}

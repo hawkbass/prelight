@@ -1,0 +1,68 @@
+{
+  "code": "emoji",
+  "name": "Emoji stress set",
+  "direction": "ltr",
+  "source": "Curated for Prelight v0.1.x F6. Grapheme cluster stress cases covering every shape the Unicode emoji spec prescribes: base, ZWJ sequences up to 7 joiners, skin-tone modifiers (all 5 Fitzpatrick levels), regional-indicator flags, keycaps, tag sequences (subdivision flags), variation-selector forms, and recently-added characters through Emoji 15.1 (2023). Every entry is a single grapheme unless the key ends in _run, _prefix, or _suffix.",
+  "notes": "Browsers render these as single grapheme clusters when the installed font supports the sequence. When the font does not, fallback behaviour varies: a family ZWJ may render as 4 separate heads on one engine and a single glyph on another. Prelight's job is to agree with whatever the user's chosen font actually renders, not to re-shape grapheme clusters itself. Pretext already segments on grapheme-cluster boundaries; Prelight inherits that and adds no post-correction for emoji. Release-gate floor: 93% per engine (DECISIONS #008).",
+  "strings": {
+    "single": "🚀",
+    "sequence": "🚀🔥✨",
+    "with_text_prefix": "Launching 🚀",
+    "with_text_suffix": "🎉 Success",
+    "mixed": "🚀 Ship it 🚀",
+
+    "zwj_family_2": "👨‍👩‍👧",
+    "zwj_family_3": "👨‍👩‍👧‍👦",
+    "zwj_couple_heart": "👩‍❤️‍👨",
+    "zwj_couple_kiss": "👩‍❤️‍💋‍👨",
+    "zwj_profession_fem": "👩‍⚕️",
+    "zwj_profession_male": "👨‍💼",
+    "zwj_profession_tech": "🧑‍💻",
+    "zwj_role_astronaut": "🧑‍🚀",
+    "zwj_role_judge": "🧑‍⚖️",
+    "zwj_role_scientist": "🧑‍🔬",
+    "zwj_pirate_flag": "🏴‍☠️",
+    "zwj_rainbow_flag": "🏳️‍🌈",
+    "zwj_trans_flag": "🏳️‍⚧️",
+
+    "skin_tone_1": "👋🏻",
+    "skin_tone_2": "👋🏼",
+    "skin_tone_3": "👋🏽",
+    "skin_tone_4": "👋🏾",
+    "skin_tone_5": "👋🏿",
+    "skin_tone_run": "👋🏻👋🏼👋🏽👋🏾👋🏿",
+    "skin_tone_zwj": "🧑🏽‍💻",
+    "skin_tone_family_two": "👩🏽‍👧🏽",
+
+    "flag_us": "🇺🇸",
+    "flag_gb": "🇬🇧",
+    "flag_jp": "🇯🇵",
+    "flag_de": "🇩🇪",
+    "flag_run": "🇺🇸🇬🇧🇯🇵🇩🇪🇪🇺🇨🇦🇦🇺🇧🇷",
+    "flag_scotland_tag": "🏴󠁧󠁢󠁳󠁣󠁴󠁿",
+    "flag_england_tag": "🏴󠁧󠁢󠁥󠁮󠁧󠁿",
+
+    "keycap_digit": "1️⃣",
+    "keycap_run": "1️⃣2️⃣3️⃣4️⃣5️⃣",
+    "keycap_hash": "#️⃣",
+    "keycap_star": "*️⃣",
+
+    "vs_text_form": "☀︎",
+    "vs_emoji_form": "☀️",
+    "vs_mixed_run": "☀️ ❤️ ✈️ ⚠️ ⚡",
+
+    "emoji_13_plus": "🥲🥸🫀🫁🥷🪃🪄🪅🪆🛖🛻🪐",
+    "emoji_14_plus": "🫠🫡🫢🫣🫤🫥🪩🪪🫖🪷🫘",
+    "emoji_15_plus": "🫨🫸🫷🪽🪿🫎🫏🪼🪻🫚🫛",
+    "emoji_15_1": "🙂‍↕️🙂‍↔️🧑‍🧑‍🧒‍🧒",
+
+    "ui_toast_success": "✅ Saved",
+    "ui_toast_error": "❌ Could not save",
+    "ui_toast_warn": "⚠️ Unsaved changes",
+    "ui_badge_new": "🆕 Just shipped",
+
+    "stress_mixed_graphemes": "👋🏽 Hey! 🚀🔥 ready? 🇺🇸",
+    "stress_zwj_heavy": "👨‍👩‍👧‍👦 👩‍❤️‍💋‍👨 🧑🏽‍🚀 🏳️‍🌈",
+    "stress_long_run": "🎉🎊🥳🎂🍰🧁🍦🍩🍪🍫🍬🍭"
+  }
+}

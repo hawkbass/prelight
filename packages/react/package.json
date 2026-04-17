@@ -1,0 +1,50 @@
+{
+  "name": "@prelight/react",
+  "version": "0.0.0",
+  "description": "React adapter for Prelight. Extracts text + style + width from rendered components and delegates to @prelight/core.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "dependencies": {
+    "@prelight/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "react",
+    "layout",
+    "verification",
+    "testing"
+  ]
+}

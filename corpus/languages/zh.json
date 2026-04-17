@@ -1,0 +1,18 @@
+{
+  "code": "zh",
+  "name": "Chinese (Simplified)",
+  "direction": "ltr",
+  "source": "Curated for Prelight v0.1. Standard UI strings.",
+  "strings": {
+    "save": "保存",
+    "cancel": "取消",
+    "delete": "删除",
+    "sign_in": "登录",
+    "sign_out": "退出",
+    "settings": "设置",
+    "search": "搜索",
+    "load_more": "加载更多",
+    "sentence_short": "请保存您的工作。",
+    "sentence_long": "在继续之前请保存您的工作,以免丢失任何更改。"
+  }
+}

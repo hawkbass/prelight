@@ -1,0 +1,20 @@
+{
+  "code": "en",
+  "name": "English",
+  "direction": "ltr",
+  "source": "Curated for Prelight v0.1. Public-domain strings or self-authored.",
+  "strings": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "sign_in": "Sign in",
+    "sign_out": "Sign out",
+    "settings": "Settings",
+    "search": "Search",
+    "load_more": "Load more",
+    "sentence_short": "Save your work.",
+    "sentence_long": "Before continuing, please save your work so we don't lose your progress.",
+    "url": "https://example.com/path/to/something/rather/long",
+    "email": "someone@example.com"
+  }
+}

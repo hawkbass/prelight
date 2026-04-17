@@ -1,0 +1,15 @@
+{
+  "name": "@prelight/corpus",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Multilingual text corpus and bundled test fonts used by @prelight/core's ground-truth, demos, and tests.",
+  "type": "module",
+  "main": "./schema.ts",
+  "exports": {
+    ".": "./schema.ts",
+    "./fonts": "./fonts.ts"
+  },
+  "dependencies": {
+    "@prelight/core": "workspace:*"
+  }
+}

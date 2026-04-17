@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Prelight — verify your UI before the browser runs it</title>
+    <meta
+      name="description"
+      content="Prelight is a static text-layout verifier. It catches German overflows, Arabic wrapping bugs, and dynamic-type-scale failures in milliseconds, without a browser."
+    />
+    <meta property="og:title" content="Prelight" />
+    <meta
+      property="og:description"
+      content="Static text-layout verification. Catches overflow bugs in milliseconds, not minutes."
+    />
+    <style>
+      :root {
+        --fg: #111;
+        --fg-soft: #555;
+        --bg: #fff;
+        --accent: #0a7;
+        --bad: #c00;
+        --code-bg: #f5f5f4;
+        --code-fg: #0a7;
+        --border: #e5e5e3;
+        font-family:
+          ui-sans-serif, system-ui, -apple-system, Segoe UI, Inter, sans-serif;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --fg: #eee;
+          --fg-soft: #999;
+          --bg: #0a0a0a;
+          --accent: #4fd;
+          --bad: #f77;
+          --code-bg: #1a1a1a;
+          --code-fg: #4fd;
+          --border: #222;
+        }
+      }
+      html,
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        margin: 0;
+        padding: 0;
+        line-height: 1.55;
+      }
+      main {
+        max-width: 680px;
+        margin: 0 auto;
+        padding: 64px 24px 96px;
+      }
+      h1 {
+        font-size: 2.75rem;
+        letter-spacing: -0.025em;
+        line-height: 1.1;
+        margin: 0 0 12px;
+      }
+      h1 .dot {
+        color: var(--accent);
+      }
+      h2 {
+        font-size: 1.4rem;
+        letter-spacing: -0.015em;
+        margin: 40px 0 12px;
+      }
+      h3 {
+        font-size: 1.05rem;
+        margin: 28px 0 8px;
+      }
+      p {
+        color: var(--fg);
+        margin: 0 0 16px;
+      }
+      .tagline {
+        color: var(--fg-soft);
+        font-size: 1.2rem;
+        margin: 0 0 32px;
+      }
+      code,
+      pre {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.92em;
+      }
+      pre {
+        background: var(--code-bg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 16px;
+        overflow-x: auto;
+        line-height: 1.5;
+      }
+      code {
+        background: var(--code-bg);
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+        margin: 24px 0 32px;
+      }
+      .stat {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 16px;
+      }
+      .stat .n {
+        font-size: 1.4rem;
+        font-weight: 600;
+        color: var(--accent);
+      }
+      .stat .l {
+        color: var(--fg-soft);
+        font-size: 0.88rem;
+      }
+      .bad {
+        color: var(--bad);
+      }
+      pre code.bad {
+        color: var(--bad);
+        background: transparent;
+        padding: 0;
+      }
+      .good {
+        color: var(--accent);
+      }
+      ul {
+        padding-left: 20px;
+      }
+      li {
+        margin: 6px 0;
+      }
+      a {
+        color: var(--accent);
+      }
+      footer {
+        color: var(--fg-soft);
+        margin-top: 64px;
+        padding-top: 24px;
+        border-top: 1px solid var(--border);
+        font-size: 0.88rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Prelight<span class="dot">.</span></h1>
+      <p class="tagline">
+        Verify your UI before the browser runs it. Static text-layout checks that
+        catch the bugs you only notice in German.
+      </p>
+
+      <div class="stats">
+        <div class="stat">
+          <div class="n">0.024<span class="l">ms/cell</span></div>
+          <div class="l">measured, 50-run mean</div>
+        </div>
+        <div class="stat">
+          <div class="n">23×</div>
+          <div class="l">faster than Playwright</div>
+        </div>
+        <div class="stat">
+          <div class="n">97.9%<span class="l">+</span></div>
+          <div class="l">non-emoji corpus agreement, Chromium + WebKit + Firefox</div>
+        </div>
+      </div>
+
+      <h2>The bug everybody has</h2>
+      <p>
+        A designer picks a 120-pixel-wide button. The engineer types
+        <code>width: 120px</code>. The tests pass. The app ships. A user in Berlin
+        gets <span class="bad">Rechtsschutzversicherungsgesellschaften</span>
+        crammed into that button and files a bug.
+      </p>
+      <p>
+        This is never caught in dev because the dev reads English. It's rarely
+        caught in CI because rendering text in a browser is slow and flaky.
+        Internationalization teams have been live-patching it for twenty years.
+      </p>
+
+      <h2>1. The button that fits in English and breaks in German</h2>
+      <p>
+        The failing case that every product team on Earth has lived through.
+        Same <code>&lt;Button&gt;</code>. Same 120-pixel slot. Four languages.
+        Watch what the German string does.
+      </p>
+
+      <pre><code>// demos/failing-german-button/Button.test.tsx
+import '@prelight/vitest'
+import { verifyComponent } from '@prelight/react'
+import { Button } from './Button'
+
+const labels = {
+  en: 'Get coverage',
+  de: 'Rechtsschutzversicherungsgesellschaften',
+  ar: 'شركات التأمين',
+  ja: '法的保護保険会社',
+}
+
+test('"Get coverage" button fits at every language', () =&gt; {
+  const result = verifyComponent({
+    element: (lang) =&gt; &lt;Button label={labels[lang]} /&gt;,
+    languages: ['en', 'de', 'ar', 'ja'],
+    font: '16px sans-serif',
+    maxWidth: 120,
+    lineHeight: 20,
+    constraints: { maxLines: 1, noOverflow: true },
+  })
+  expect(result.ok).toBe(true)
+})</code></pre>
+
+      <p>This is the real output. Copied from the terminal, not paraphrased:</p>
+      <pre><code class="bad">Prelight: 2 failures across 4 cells.
+
+  de  scale=1  width=120px
+    - noOverflow: text overflows its slot at de scale=1 (width 120px):
+      single-line text would be 213.0px wide, 93.0px over. Wraps to 2 lines.
+    - maxLines: text wraps to 2 lines but may not exceed 1 at de scale=1.</code></pre>
+
+      <p>
+        Notice the pixels. Not "it broke." Not a screenshot diff. A measured
+        number of pixels over the edge, the exact language it happened in,
+        and the exact scale — so the fix is obvious.
+      </p>
+
+      <h2>2. A config file, a CLI, and your whole design system under verification</h2>
+      <p>
+        Seven components, four languages, three accessibility scales — 84 cells,
+        verified from a single config file on every PR.
+      </p>
+
+      <pre><code># prelight.config.tsx (abridged)
+import type { PrelightConfig } from '@prelight/cli'
+import { Button } from './components/Button'
+import { NavLink } from './components/NavLink'
+import { StatusBadge } from './components/StatusBadge'
+import { Toast } from './components/Toast'
+import { labels, LANGS } from './labels'
+
+const matrix = { languages: LANGS, fontScales: [1, 1.25, 1.5] }
+
+export default {
+  tests: [
+    { name: 'Button: Save', element: (l) =&gt; &lt;Button label={labels[l].save}/&gt;,
+      font: '16px sans-serif', maxWidth: 120, lineHeight: 20,
+      constraints: { maxLines: 1, noOverflow: true }, ...matrix },
+    { name: 'NavLink: Settings', element: (l) =&gt; &lt;NavLink label={labels[l].settings_nav}/&gt;,
+      font: '15px sans-serif', maxWidth: 96, lineHeight: 20,
+      constraints: { maxLines: 1, noOverflow: true }, ...matrix },
+    { name: 'StatusBadge: Refunded', element: (l) =&gt; &lt;StatusBadge label={labels[l].status_refunded}/&gt;,
+      font: '13px sans-serif', maxWidth: 80, lineHeight: 16,
+      constraints: { maxLines: 1, noOverflow: true }, ...matrix },
+    // … three more …
+  ],
+} satisfies PrelightConfig</code></pre>
+
+      <p>Run the CLI. Real, unedited terminal output from <code>bun run prelight</code>:</p>
+      <pre><code>Prelight: 3 of 7 tests failed (84 cells in 32ms)
+
+  [PASS] Button: Save (short copy)  (12 cells)
+  [PASS] Button: New item (medium copy)  (12 cells)
+  [FAIL] NavLink: Settings  (12 cells)
+      · [noOverflow] ar @ scale=1.5, width=96px — single-line text
+        would be 101.3px wide, 5.3px over. Wraps to 2 lines.
+      · [maxLines]   ar @ scale=1.5, width=96px — wraps to 2 lines
+        but may not exceed 1.
+  [FAIL] NavLink: Pricing   (12 cells)
+      · [noOverflow] de @ scale=1.5, width=96px — single-line text
+        would be 111.5px wide, 15.5px over. Wraps to 2 lines.
+  [PASS] StatusBadge: Paid  (12 cells)
+  [FAIL] StatusBadge: Refunded (12 cells)
+      · [noOverflow] ar @ scale=1,    width=80px — 14.7px over.
+      · [noOverflow] ar @ scale=1.25, width=80px — 38.4px over.
+      · [noOverflow] ar @ scale=1.5,  width=80px — 62.0px over.
+      … 1 more failure(s)
+  [PASS] Toast: Error message (may wrap)  (12 cells)</code></pre>
+
+      <p>
+        84 cells, under 32 ms. The exit code is 1, CI fails the PR, and the
+        author sees the exact pixel overflow before asking a reviewer.
+      </p>
+
+      <h2>3. 23× faster than Playwright. On purpose.</h2>
+      <p>
+        The same 36-cell verification workload, compared against Playwright in
+        its most favorable configuration: a single reused Chromium page,
+        <code>page.evaluate()</code> returning numbers only, no screenshots.
+        50 iterations per side, warm path.
+      </p>
+
+      <pre><code>Prelight (static, in-process):
+  mean 0.88 ms  p50 0.81 ms  p95 1.64 ms  p99 1.84 ms
+  per-cell mean 0.024 ms
+  warmup 19.67 ms (one-time)
+
+Playwright (DOM measurement):
+  mean 20.35 ms  p50 19.96 ms  p95 25.02 ms  p99 27.62 ms
+  per-cell mean 0.57 ms
+  launch cost 243 ms (one-time, excluded from samples)
+
+Prelight is 23.2× faster on the warm path (mean-vs-mean).
+End-to-end, including Chromium launch, Prelight finishes 20× faster.</code></pre>
+
+      <p>
+        Run it yourself: <code>cd demos/speed-comparison &amp;&amp; npx tsx bench.ts</code>.
+        Every future number is checked into
+        <a href="https://github.com/prelight/prelight/blob/main/demos/speed-comparison/RESULTS.md">RESULTS.md</a>,
+        dated, append-only.
+      </p>
+
+      <h2>What makes this possible</h2>
+      <p>
+        Prelight composes with
+        <a href="https://github.com/chenglou/pretext">@chenglou/pretext</a>, a
+        DOM-free text measurement library that uses the font engine
+        (<code>canvas.measureText</code>) directly. Prelight adds the layer above:
+        languages, scales, predicates, failure reporting, and React extraction.
+      </p>
+      <p>
+        We bundle Inter Variable v4.1 so measurements are deterministic across
+        machines. Against real Chromium, WebKit, and Firefox on a 928-case
+        multilingual corpus (7 languages + a 51-string emoji stress set) we
+        currently agree <strong>94.5% / 94.7% / 94.3%</strong> overall —
+        <strong>≥ 97.9% on every non-emoji cell</strong>, every language and
+        script above 95%. Emoji sits at 90% on all three engines; the gap is
+        font-fallback variance (Inter has no emoji glyphs), documented in
+        <a href="https://github.com/prelight/prelight/blob/main/FINDINGS.md">FINDINGS.md §F6</a>,
+        not a layout bug. Every disagreement is counted in
+        <a href="https://github.com/prelight/prelight/blob/main/FINDINGS.md">FINDINGS.md</a>
+        and gated with per-engine × per-language floors in CI.
+      </p>
+
+      <h2>Predicates</h2>
+      <p>Every predicate is a pure boolean over one measured cell.</p>
+      <ul>
+        <li><code>noOverflow</code> — natural width fits the slot.</li>
+        <li><code>maxLines</code> — wraps to at most N lines.</li>
+        <li><code>minLines</code> — fills at least N lines.</li>
+        <li><code>lines</code> — takes exactly N lines.</li>
+        <li><code>singleLine</code> — stays on one line AND fits.</li>
+        <li><code>noTruncation</code> — never ellipsized.</li>
+      </ul>
+
+      <h2>Install</h2>
+      <pre><code>bun add -D @prelight/core @prelight/react @prelight/vitest
+# or
+npm install --save-dev @prelight/core @prelight/react @prelight/vitest</code></pre>
+
+      <h2>Honest about scope</h2>
+      <p>
+        v0.1 verifies what <em>text</em> does. It does not solve margin collapse,
+        grid intrinsic sizing, or CSS cascade resolution. Those are on the
+        roadmap (<a href="https://github.com/prelight/prelight/blob/main/ROADMAP.md"
+          >ROADMAP.md</a
+        >), not in this release.
+      </p>
+      <p>
+        v0.1 ships with a ground-truth harness that diffs every corpus case
+        against real Chromium rendering. Every release must pass it.
+      </p>
+
+      <h2>Read more</h2>
+      <ul>
+        <li><a href="./thesis.md">The thesis behind Prelight</a></li>
+        <li><a href="./playground.html">Interactive playground</a></li>
+        <li><a href="https://github.com/prelight/prelight">Source on GitHub</a></li>
+      </ul>
+
+      <footer>
+        Prelight is MIT-licensed. Inspired by @chenglou/pretext. Built in the open.
+      </footer>
+    </main>
+  </body>
+</html>

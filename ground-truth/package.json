@@ -1,0 +1,21 @@
+{
+  "name": "ground-truth",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Playwright harness that renders the Prelight corpus in Chromium and diffs against @prelight/core's prediction. WebKit + Firefox sweeps scheduled for v1.0 (see ROADMAP). The empirical gate for every release.",
+  "type": "module",
+  "scripts": {
+    "check": "tsx run.ts",
+    "check:json": "tsx run.ts --json",
+    "check:strict": "tsx run.ts --strict",
+    "install-browsers": "playwright install --with-deps chromium"
+  },
+  "devDependencies": {
+    "@chenglou/pretext": "^0.0.3",
+    "@prelight/core": "workspace:*",
+    "@types/node": "^20.0.0",
+    "playwright": "^1.48.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.0"
+  }
+}

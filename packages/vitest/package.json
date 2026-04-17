@@ -1,0 +1,45 @@
+{
+  "name": "@prelight/vitest",
+  "version": "0.0.0",
+  "description": "Vitest matcher for Prelight. expect(...).toLayout({ ... }).",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "peerDependencies": {
+    "vitest": ">=1"
+  },
+  "dependencies": {
+    "@prelight/core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "vitest",
+    "matcher",
+    "layout",
+    "testing"
+  ]
+}

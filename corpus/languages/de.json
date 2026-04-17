@@ -1,0 +1,22 @@
+{
+  "code": "de",
+  "name": "German",
+  "direction": "ltr",
+  "source": "Curated for Prelight v0.1. German compound words from public dictionaries.",
+  "strings": {
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "delete": "Löschen",
+    "sign_in": "Anmelden",
+    "sign_out": "Abmelden",
+    "settings": "Einstellungen",
+    "search": "Suchen",
+    "load_more": "Mehr laden",
+    "compound_medium": "Datenschutzbestimmungen",
+    "compound_long": "Rechtsschutzversicherung",
+    "compound_extra_long": "Rechtsschutzversicherungsgesellschaften",
+    "compound_stress": "Grundstücksverkehrsgenehmigungszuständigkeitsübertragungsverordnung",
+    "sentence_short": "Speichern Sie Ihre Arbeit.",
+    "sentence_long": "Bitte speichern Sie Ihre Arbeit, bevor Sie fortfahren, damit wir keine Änderungen verlieren."
+  }
+}

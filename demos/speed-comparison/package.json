@@ -1,0 +1,20 @@
+{
+  "name": "demo-speed-comparison",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Head-to-head benchmark: equivalent layout verification in Playwright vs Prelight. The number that goes on the site.",
+  "type": "module",
+  "scripts": {
+    "bench": "tsx bench.ts",
+    "bench:json": "tsx bench.ts --json"
+  },
+  "dependencies": {
+    "@prelight/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "playwright": "^1.48.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.0"
+  }
+}

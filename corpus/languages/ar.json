@@ -1,0 +1,20 @@
+{
+  "code": "ar",
+  "name": "Arabic",
+  "direction": "rtl",
+  "source": "Curated for Prelight v0.1. Strings are standard UI translations.",
+  "strings": {
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "delete": "حذف",
+    "sign_in": "تسجيل الدخول",
+    "sign_out": "تسجيل الخروج",
+    "settings": "الإعدادات",
+    "search": "بحث",
+    "load_more": "تحميل المزيد",
+    "sentence_short": "احفظ عملك.",
+    "sentence_long": "يرجى حفظ عملك قبل المتابعة حتى لا نفقد أي تغييرات.",
+    "with_english_mix": "اضغط OK للمتابعة",
+    "numbers_mixed": "الصفحة 12 من 34"
+  }
+}

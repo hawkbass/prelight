@@ -1,0 +1,22 @@
+{
+  "@prelight/core": {
+    "minified": 11264,
+    "gzipped": 4864
+  },
+  "@prelight/react": {
+    "minified": 2048,
+    "gzipped": 1024
+  },
+  "@prelight/vitest": {
+    "minified": 2048,
+    "gzipped": 1024
+  },
+  "@prelight/jest": {
+    "minified": 2048,
+    "gzipped": 1024
+  },
+  "@prelight/cli": {
+    "minified": 6144,
+    "gzipped": 2560
+  }
+}
