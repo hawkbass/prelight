@@ -11,6 +11,142 @@ the work.
 
 ---
 
+## 2026-04-17 — v0.3 H6a landed; stop before H6b (emoji) — new capability, not a contract move
+
+**Session transcript:** [v0.3 H6a measurementFonts.cjk contract](0ab7a65b-69bb-48c9-b9af-f8bf5624a030)
+
+### State (fully committed)
+
+H6a shipped as `4e90d5b` on top of `57b34a0`:
+
+- **H6a** `4e90d5b` v0.3 H6a: VerifySpec.measurementFonts.cjk
+  contract surface. Retires the `PRELIGHT-NEXT(v0.3)` marker
+  in `packages/core/src/shape/cjk.ts`. New
+  `MeasurementFontFamilies` type (just `cjk?: string[]` today;
+  emoji slot tracked inline as `PRELIGHT-NEXT(v0.3 H6b)`). New
+  optional `measurementFonts?` on `VerifySpec`. Precedence
+  codified: per-call arg > module-level global > spec's own
+  `font`. Empty-array (`cjk: []`) is the explicit opt-out
+  signal.
+- **Bundle budget bumped** `@prelight/core` 22.00 → 24.00 KB
+  min / 8.50 → 9.00 KB gz in the same commit (the H5 handoff
+  flagged the 22.00 ceiling only had 0.10 KB headroom
+  remaining; H6a's +0.11 KB crossed it by 0.01 KB). Deliberate
+  round-number step matching H1 18→20 and H3 20→22. ~2 KB min
+  / ~0.6 KB gz headroom now remains for H6b + H7 + H8.
+
+Working tree holds only the pre-existing v0.2.0-rc doc fixes
+(`README.md`, `ROADMAP.md`) plus the untracked research file
+(`cursor_chenlou_pretext_tool_research.md`) — identical to the
+pre-H6a state. Do NOT fold those doc fixes into any v0.3
+commit; they still belong to v0.3.0-rc tagging at H8 when
+every test count and doc reference stabilises.
+
+### Gates (last verified this session)
+
+- `bun run typecheck` — 5/5 packages, 0 errors
+- `bun run test` — **395 passing** (core 258, react 80,
+  vitest 11, jest 5, cli 41). +12 vs H5 (all from the new
+  `measurement-fonts.test.ts` suite).
+- `bun run build` — 5/5 packages, 0 errors
+- `bun scripts/measure-bundle.ts --strict` — within budget:
+  - `@prelight/core` 22.01 KB min / 8.41 KB gz (24.00 / 9.00)
+    — ~2 KB min / ~0.6 KB gz headroom for H6b + H7 + H8.
+  - `@prelight/react` 6.14 KB min / 2.64 KB gz (6.50 / 2.88)
+  - `@prelight/vitest` 2.10 KB min / 806 B gz (2.50 / 1.00)
+  - `@prelight/jest` 2.24 KB min / 905 B gz (2.50 / 1.00)
+  - `@prelight/cli` 7.23 KB min / 2.69 KB gz (8.00 / 3.00)
+
+### Why I stopped here (natural boundary, not a code cliff)
+
+H6a was deliberately scoped as "CJK contract surface only"
+during the pre-implementation planning pass with the user.
+That scope is now complete: the marker is retired, the
+contract is wired, the precedence is codified in code and
+docs, the tests prove the wiring, the bundle bump is
+deliberate and documented, the back door is retained by
+design.
+
+H6b (emoji measurement) is a **genuinely new capability**, not
+a contract move. It needs:
+- A new `containsEmoji` predicate covering the relevant
+  Unicode blocks (Emoji, Emoji_Presentation, various
+  Supplementary Multilingual Plane blocks, ZWJ sequences).
+- A new probe path — probably `pickEmojiFamily` with a
+  different probe glyph. The delta threshold may also need
+  re-tuning; emoji glyph widths across host fonts are not
+  the same regime as CJK.
+- A decision on where the emoji correction slots into the
+  verify pipeline. Unlike CJK (which re-wraps because
+  Pretext under-wraps), emoji's failure mode is *width*
+  estimation of emoji runs inside otherwise-Latin text —
+  that's a different algorithmic shape than
+  `correctCJKLayout`, and possibly needs its own
+  `correctEmojiLayout` function (or a re-measurement pass
+  on Pretext's existing lines rather than a re-wrap).
+- The additive shape change:
+  `MeasurementFontFamilies.emoji?: string[]` — trivial.
+
+I genuinely don't have a confident design for H6b's slot in
+the pipeline without more investigation, and designing it at
+the tail end of a long session is exactly the cliff-edge
+failure mode the user pre-registered against. Stop here, let
+a fresh agent pick it up with full attention.
+
+### What a fresh agent should do first
+
+1. Read this block + the "evidence invariant" in
+   `AGENTS.md`.
+2. Read the latest CHANGELOG.md + FINDINGS.md H6a entries —
+   the top blocks describe the contract surface and the
+   precedence rules as shipped.
+3. Read `packages/core/src/shape/cjk.ts` as the structural
+   template for any H6b emoji path — it shows the
+   per-call > global fallback idiom.
+4. Read `packages/core/src/verify.ts:89` to see where in
+   the correction pipeline emoji would need to slot.
+5. Before touching code, design the H6b emoji correction
+   *shape* and run it past the user. Key open questions:
+    - Is emoji failure a wrap problem (unlikely) or a
+      width-measurement problem (likely)? This decides
+      whether the correction re-wraps or re-measures.
+    - What's the probe glyph? ('🙂' / '👍' / a combining
+      sequence?)
+    - Where does the correction slot into `verify.ts` —
+      alongside `correctCJKLayout`, or as a per-cell
+      width-measurement override?
+    - Does emoji measurement need its own fallback chain
+      distinct from CJK's (per-spec > global > font) or can
+      it share the same shape?
+
+### Remaining v0.3 backlog
+
+- **H6b**: emoji measurementFonts — new capability, user
+  input needed on the four questions above. Will add
+  `emoji?: string[]` to `MeasurementFontFamilies`
+  additively (non-breaking on H6a consumers).
+- **H7**: Runtime style probes for emotion + styled-components
+  — the `PRELIGHT-NEXT(v0.3 H7)` markers in
+  `packages/react/src/style-resolver.ts`. Flagged by the
+  original v0.3 plan as the "high-risk cliff" phase because
+  it needs a runtime (not AST) probe path. Expect to pause
+  before H7 and get user input on scope.
+- **H8**: v0.3.0-rc tagging. Fold the pre-existing v0.2.0-rc
+  doc fixes (`README.md`, `ROADMAP.md`) into this release
+  alongside an H8 docs pass that updates v0.3's shipped
+  feature set. Same publish-decision wait as v0.2.0-rc —
+  user says go before anything pushes.
+
+### Versioning context (unchanged from prior blocks)
+
+The user chose to invent intermediate point releases (v0.4,
+v0.5, …) between v0.3 and v1.0, slicing the v1.0 "full
+Presize engine" scope. Exact slicing of v0.4/v0.5 content is
+**still pending user input** and should be asked for only
+after v0.3 lands.
+
+---
+
 ## 2026-04-17 — v0.3 H2–H5 landed; stop at natural boundary before H6 contract work
 
 **Session transcript:** [v0.3 H2 H3 H4 H5 continuation](0ab7a65b-69bb-48c9-b9af-f8bf5624a030)
