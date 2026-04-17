@@ -161,3 +161,22 @@ or in a tweet:
    Windows 10.0.26200, Bun 1.3.11").
 3. Link from the claim to the artifact (RESULTS.md, FINDINGS.md, etc.).
 4. If the number moves, update every occurrence in the same commit.
+
+## Learned User Preferences
+
+- Every session starts with "continue from HANDOFF.md" — read HANDOFF.md before taking any action, and treat its top block as the scope lock.
+- When a plan is already agreed, skip preamble and Q&A ("no opinions, please continue") — move straight to execution and only pause for a new cliff-edge decision.
+- Back technical forks with researched evidence (primary sources, citations, local probes) before recommending — decisions from intuition or "feelings" get rejected and sent back for deeper research.
+- Do not autopilot-pivot away from an agreed direction when new findings appear — surface the evidence, explicitly ask for sign-off, and wait for it before changing course.
+- Wait for an explicit user sign-off (e.g. "I sign off, ship as H6c") before landing a phase when any design fork was deferred to the user.
+- Project positioning for README, thesis, site, and launch copy is a reputation-building, open-source tool for web devs in the AI era — framed as game-changing infrastructure, not a monetisation play.
+- Bundle budget is "keep it lean, bump it when needed" — grow `scripts/bundle-budget.json` in the same diff as any legitimate size increase, and justify it.
+
+## Learned Workspace Facts
+
+- Work is organised by ordered phase labels (H6a, H6b, H6c, H7, …). Each phase lands as a single clean commit; scope and open questions are locked in HANDOFF.md before code is written.
+- AGENTS.md is durable orientation, HANDOFF.md is the live continuation pointer, DECISIONS.md is append-only ADRs, FINDINGS.md is append-only dated results — do not retrofit new entries into old ones.
+- Do not stack `bun run typecheck` and `bun run test` as parallel Shell calls on PowerShell, and do not pipe `bun run test` through `Select-Object` — it hangs. Run them sequentially with `block_until_ms` ≥ 120 s for typecheck and ≥ 180 s for tests.
+- `subset-font` (npm) routes every font through `fontverter.convert(..., 'truetype')`, which strips `CBDT`/`CBLC`. For colour emoji subsetting, call `harfbuzzjs`' `hb_subset_or_fail` directly (see harfbuzzjs#9); for a lean path, ship monochrome Noto Emoji instead.
+- The ground-truth harness compares numerically only (`lineCount`, `height`, `getBoundingClientRect()` width) — bundled measurement fonts are chosen for advance-width parity between `@napi-rs/canvas` and Chromium, not for visual fidelity of screenshots.
+- `VerifySpec.measurementFonts` precedence (H6a contract) is: per-call spec field > module-level global setter (back door) > spec's own `font`. An empty array opts out entirely; the `emoji` slot is reserved for H6b as an additive, non-breaking extension.

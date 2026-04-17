@@ -6,6 +6,109 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Phase H6c — v0.3 bundled emoji harness font (2026-04-17)
+
+- **`ground-truth/fonts/NotoEmoji-subset.ttf`** — 611 KB
+  monochrome outline subset of Google's `Noto-COLRv1.ttf` pinned to
+  tag `v2.051`. Carries `glyf`/`loca`/`cmap`/`GSUB`/`hmtx` for the
+  242 codepoints the emoji corpus exercises, transitively closed
+  across GSUB so ZWJ sequences, skin-tone modifiers, keycap
+  sequences, and regional-indicator flags resolve to their ligature
+  glyphs instead of per-codepoint cascades. Wired into both sides
+  of the oracle: `bootstrap.html` gets an `@font-face` aliased to
+  `'Inter'` over a broad emoji `unicode-range` so Chromium / WebKit
+  / Firefox render through our subset; `runHarness` calls
+  `loadBundledFont` + `setEmojiMeasurementFamilies(['Prelight Noto Emoji'])`
+  so `@napi-rs/canvas` measures against the same SFNT. Retires the
+  "emoji harness font" nice-to-have tracked on the H6b HANDOFF
+  block. (H6c)
+- **`scripts/subset-emoji-font.ts`** — reproducible, pinned subset
+  builder. `subset-font` with `targetFormat: 'truetype'` leverages
+  `fontverter`'s SFNT rewrite (which discards COLR/CPAL but
+  preserves the `glyf` outline fallback that Noto-COLRv1 ships) to
+  produce a color-free subset. Deliberately does **not** pass
+  `noLayoutClosure: true`: closure adds ~515 KB but keeps
+  measurement symmetric with the browser on ligature sequences
+  (keycaps, England flag, ZWJ family/profession emoji). Source
+  fetched with SHA-256 pinning; corpus text built from
+  `corpus/languages/emoji.json`. Prints a `probe-emoji-tables.ts`
+  follow-up hint. (H6c)
+- **`correctEmojiLayout` per-grapheme font selection** — the H6b
+  correction loop measured every grapheme with the resolved emoji
+  font. That shape is wrong when the emoji face is an emoji-only
+  subset: Latin graphemes fall to the subset's `.notdef` glyph
+  (~1000 fUnits, rendered at ~0.5em), which over-measures runs
+  like "Launching 🚀" because the browser uses Inter for the
+  Latin half and the subset for 🚀. H6c splits the measurement:
+  emoji graphemes (`EMOJI_DETECTOR.test(g)`) measure against the
+  emoji font, non-emoji graphemes measure against the spec's own
+  `font`. Parallels `correctCJKLayout`'s existing split. See
+  `packages/core/src/shape/emoji.ts`. (H6c)
+- **Measured agreement delta** — cross-engine strict ground-truth
+  run on 2026-04-17 (`ground-truth/cross-engine-h6c-2026-04-17.json`):
+  - **Chromium emoji 367/408 → 407/408 (90.0% → 99.75%)**;
+    overall 911/928 → 917/928 (98.17% → 98.81%).
+  - **WebKit emoji — → 407/408 (— → 99.75%)**;
+    overall — → 919/928 (99.03%).
+  - **Firefox emoji — → 407/408 (— → 99.75%)**;
+    overall — → 915/928 (98.60%).
+  - The 1/408 residual is engine-dependent ("⚠️ Unsaved changes"
+    on chromium, "☀️ ❤️ ✈️ ⚠️ ⚡" on webkit, a comparable
+    variation-selector sequence on firefox) and traces to emoji
+    presentation-selector (`U+FE0F`) cascade differences between
+    engines when the codepoint has a default text presentation —
+    i.e. engine-specific font cascade, not a systemic Prelight
+    bug. Documented as a known residual in FINDINGS §H6c. (H6c)
+- **`PER_ENGINE_FLOORS.*.emoji` re-raised** — 0.88 → 0.98 across
+  chromium / webkit / firefox in `ground-truth/run.ts`. Cushion
+  is ~1.75pp below measured agreement; covers HarfBuzz version
+  drift between `@napi-rs/canvas`'s Skia shaper and the three
+  browser shapers without masking real regressions. DECISIONS #008
+  updated in lockstep. (H6c)
+- **Bundle impact**: `@prelight/core` 23.80 → 23.86 KB min / 8.97
+  → 8.99 KB gz (+0.06 KB min / +0.02 KB gz — the per-grapheme
+  conditional in `correctEmojiLayout` is the only core change).
+  Still within H6a's 24.00 KB / 9.00 KB ceiling; ~0.14 KB min
+  headroom remaining. (H6c)
+- **Investigation write-up as evidence** — the path to H6c was
+  longer than the landing: three subsetter attempts before one
+  produced a working SFNT. `subset-font` + default `targetFormat`
+  stripped `CBDT`/`CBLC` (via `fontverter.convert` run before
+  subsetting, not via any `targetFormat` semantics); direct
+  `harfbuzzjs` WASM calls also stripped them because
+  `harfbuzzjs@0.10.3` is compiled with `HB_TINY` and cannot emit
+  color tables at all. The path that worked — leveraging
+  `fontverter`'s table-rewrite as a color-stripping primitive on
+  Noto-COLRv1's `glyf` fallback — is not obvious from either
+  library's docs and is documented at full depth in FINDINGS
+  §H6c so a future agent can skip the three-hour detour. Color
+  emoji via a grafted or rebuilt WASM is tracked as a follow-up
+  (not blocking v0.3): monochrome outline is already
+  measurement-equivalent because canvas-side shapers resolve to
+  the same advance widths either way. (H6c)
+- **Scope decisions locked before implementation**:
+  (1) Color vs monochrome — deliberate choice for monochrome
+  outline because advance widths are the only thing that matters
+  for measurement; the color tables would add ~2 MB for zero
+  agreement lift. (2) GSUB closure on — trading ~515 KB of subset
+  weight for 6/408 ligature agreement (keycap-1..5, England flag)
+  that `noLayoutClosure: true` leaves broken. (3) The subset is
+  committed to the repo (not fetched on demand) because the
+  ground-truth harness runs in CI and must be reproducible without
+  network. (H6c)
+- **Artifacts**:
+  - `scripts/subset-emoji-font.ts` — the builder.
+  - `scripts/probe-emoji-tables.ts` — SFNT table inspector (also
+    used to diagnose the CBDT-stripping failures above).
+  - `ground-truth/fonts/NotoEmoji-subset.ttf` — the committed subset.
+  - `ground-truth/cross-engine-h6c-2026-04-17.json` — the post-H6c
+    baseline.
+  - `packages/core/src/shape/emoji.ts` — per-grapheme split.
+  - `ground-truth/harness.ts` — `@font-face` + `loadBundledFont` +
+    `setEmojiMeasurementFamilies` wiring.
+  - `ground-truth/run.ts` — `PER_ENGINE_FLOORS` raised.
+  - `DECISIONS.md` — floors and overall numbers re-stated. (H6c)
+
 ### Phase H6b — v0.3 `VerifySpec.measurementFonts.emoji` contract surface (2026-04-17)
 
 - **`MeasurementFontFamilies.emoji?: string[]`** — additive slot on

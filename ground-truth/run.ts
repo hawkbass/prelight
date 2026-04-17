@@ -37,23 +37,24 @@ function resolveEngines(value: string): BrowserEngine[] {
 
 const engines = resolveEngines(browserArg);
 
-// Per-engine × per-language floors. Re-calibrated 2026-04-16 after F3
-// (CJK kinsoku correction shim + Noto Sans JP/SC subsets in the
-// harness) — see FINDINGS.md "Phase F: CJK kinsoku". Floors sit ~1-2
-// points below measured to absorb minor browser-version drift without
-// masking real regressions. DECISIONS #008 is the authoritative copy;
-// update both in lockstep.
+// Per-engine × per-language floors. Re-calibrated 2026-04-17 after H6c
+// (emoji harness font + split-measurement fix in `correctEmojiLayout`) —
+// see FINDINGS.md "H6c". Floors sit ~1-2 points below measured to
+// absorb minor browser-version drift without masking real regressions.
+// DECISIONS #008 is the authoritative copy; update both in lockstep.
 const PER_ENGINE_FLOORS: Record<BrowserEngine, Record<string, number>> = {
   chromium: {
     en: 0.97,
     de: 0.98,
     'compound-words': 0.95,
-    // Emoji floor relaxed from 93% to 88% in F6 when the corpus
-    // expanded from 10 → 51 strings (ZWJ, skin-tone, flags, tag
-    // sequences, Emoji 13-15.1). The 10% gap is font-fallback
-    // variance — Inter has no emoji glyphs, so each engine picks a
-    // different color/monochrome face. Documented in FINDINGS §F6.
-    emoji: 0.88,
+    // Emoji floor jumped from 88% to 98% in H6c when the harness
+    // started shipping `ground-truth/fonts/NotoEmoji-subset.ttf` on
+    // both sides (@font-face in bootstrap.html, loadBundledFont +
+    // setEmojiMeasurementFamilies on the canvas side). Measured
+    // agreement post-H6c is 99.75% on chromium; the 1.75pp cushion
+    // covers HarfBuzz version drift between @napi-rs/canvas's Skia
+    // shaper and Chromium's. See FINDINGS §H6c.
+    emoji: 0.98,
     zh: 0.96,
     ja: 0.93,
     ar: 0.95,
@@ -62,7 +63,7 @@ const PER_ENGINE_FLOORS: Record<BrowserEngine, Record<string, number>> = {
     en: 0.97,
     de: 0.98,
     'compound-words': 0.95,
-    emoji: 0.88,
+    emoji: 0.98,
     zh: 0.95,
     ja: 0.95,
     ar: 0.95,
@@ -71,7 +72,7 @@ const PER_ENGINE_FLOORS: Record<BrowserEngine, Record<string, number>> = {
     en: 0.93,
     de: 0.97,
     'compound-words': 0.95,
-    emoji: 0.88,
+    emoji: 0.98,
     zh: 0.96,
     ja: 0.94,
     ar: 0.95,

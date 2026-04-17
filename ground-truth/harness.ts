@@ -26,10 +26,12 @@
 import {
   applyFitsInOneLineCorrection,
   correctCJKLayout,
+  correctEmojiLayout,
   correctRTLLayout,
   ensureCanvasEnv,
   loadBundledFont,
   setCJKMeasurementFamilies,
+  setEmojiMeasurementFamilies,
 } from '@prelight/core';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -40,6 +42,8 @@ import { registerCorpusFonts } from '../corpus/fonts.js';
 const __harnessDir = dirname(fileURLToPath(import.meta.url));
 const NOTO_SANS_JP_SUBSET = resolve(__harnessDir, 'fonts', 'NotoSansJP-subset.ttf');
 const NOTO_SANS_SC_SUBSET = resolve(__harnessDir, 'fonts', 'NotoSansSC-subset.ttf');
+const NOTO_EMOJI_SUBSET = resolve(__harnessDir, 'fonts', 'NotoEmoji-subset.ttf');
+const EMOJI_HARNESS_FAMILY = 'Prelight Noto Emoji';
 
 export type BrowserEngine = 'chromium' | 'webkit' | 'firefox';
 
@@ -209,27 +213,30 @@ interface BootstrapFonts {
   arabic: string;
   jp: string;
   sc: string;
+  emoji: string;
 }
 
 async function readBootstrapFonts(): Promise<BootstrapFonts> {
-  const [inter, arabic, jp, sc] = await Promise.all([
+  const [inter, arabic, jp, sc, emoji] = await Promise.all([
     readFontBase64('../corpus/fonts/InterVariable.ttf'),
     readFontBase64('../corpus/fonts/NotoSansArabic.ttf'),
     readFontBase64('./fonts/NotoSansJP-subset.ttf'),
     readFontBase64('./fonts/NotoSansSC-subset.ttf'),
+    readFontBase64('./fonts/NotoEmoji-subset.ttf'),
   ]);
-  return { inter, arabic, jp, sc };
+  return { inter, arabic, jp, sc, emoji };
 }
 
 function bootstrapHtml(fonts: BootstrapFonts): string {
   // Stacked @font-face declarations for the SAME family name ("Inter").
   // The browser picks Inter's own glyphs for Latin, falls back to Noto
   // Sans Arabic for Arabic script, Noto Sans JP for Japanese (kana +
-  // kanji), and Noto Sans SC for Simplified Chinese code points that
-  // JP doesn't already cover. This mirrors exactly what the canvas
+  // kanji), Noto Sans SC for Simplified Chinese code points that JP
+  // doesn't already cover, and our monochrome Noto Emoji subset for
+  // emoji pictograph blocks. This mirrors exactly what the canvas
   // backend sees after `registerCorpusFonts()` and the harness-only
-  // CJK registrations in `runHarness` register the same files under
-  // the "Inter" alias. See FINDINGS.md §F2 / §F3.
+  // CJK / emoji registrations in `runHarness` register the same files
+  // under the "Inter" alias. See FINDINGS.md §F2 / §F3 / §H6c.
   //
   // Why the JP/SC split: Noto Sans SC is the authoritative CJK face
   // for Simplified Chinese, Noto Sans JP for Japanese. Their glyphs
@@ -237,6 +244,14 @@ function bootstrapHtml(fonts: BootstrapFonts): string {
   // (e.g., 保, 存, 的). Giving each script its own range keeps the
   // measurements faithful to what a production app with properly
   // localised fonts would produce.
+  //
+  // Why the emoji font is monochrome outline (not the CBDT color
+  // bitmap most emoji fonts ship): see FINDINGS.md §H6c — bitmap
+  // subsetting is blocked by a compile-time gate in the WASM build of
+  // hb-subset that the npm ecosystem ships today. We subset
+  // `Noto-COLRv1.ttf`'s glyf outline fallback layer instead. That layer
+  // has identical advance widths to the colour layer, which is all the
+  // measurement pipeline consumes.
   return `<!doctype html>
 <html><head><style>
 @font-face {
@@ -278,6 +293,22 @@ function bootstrapHtml(fonts: BootstrapFonts): string {
   font-style: normal;
   font-display: block;
   unicode-range: U+3400-4DBF, U+4E00-9FFF;
+}
+@font-face {
+  font-family: 'Inter';
+  src: url('data:font/ttf;base64,${fonts.emoji}') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: block;
+  unicode-range:
+    U+203C, U+2049, U+2122, U+2139, U+2194-2199, U+21A9-21AA,
+    U+231A-231B, U+2328, U+23CF, U+23E9-23F3, U+23F8-23FA,
+    U+24C2, U+25AA-25AB, U+25B6, U+25C0, U+25FB-25FE,
+    U+2600-26FF, U+2700-27BF, U+2934-2935, U+2B00-2BFF,
+    U+3030, U+303D, U+3297, U+3299, U+200D, U+20E3, U+FE0E-FE0F,
+    U+1F000-1F02F, U+1F0A0-1F0FF, U+1F100-1F64F, U+1F680-1F6FF,
+    U+1F700-1F77F, U+1F780-1F7FF, U+1F800-1F8FF, U+1F900-1F9FF,
+    U+1FA00-1FAFF, U+1FB00-1FBFF, U+E0020-E007F;
 }
 body { margin: 0; padding: 0; }
 #probe { font-family: Inter; }
@@ -323,14 +354,17 @@ export async function runHarness(
   }
   await ensureCanvasEnv();
   await registerCorpusFonts();
-  // Register the harness-only CJK subset fonts with the canvas backend
-  // so the `correctCJKLayout` shim can measure CJK glyphs against the
-  // exact same font files the browser loads via @font-face. See
-  // FINDINGS.md §F3. Consumers of @prelight/core would register their
-  // own CJK fonts via `loadBundledFont` in production.
+  // Register the harness-only CJK + emoji subset fonts with the canvas
+  // backend so the `correctCJKLayout` / `correctEmojiLayout` shims can
+  // measure those scripts against the exact same font files the browser
+  // loads via @font-face. See FINDINGS.md §F3 (CJK) and §H6c (emoji).
+  // Consumers of @prelight/core would register their own CJK / emoji
+  // fonts via `loadBundledFont` in production.
   await loadBundledFont(NOTO_SANS_JP_SUBSET, 'Noto Sans JP');
   await loadBundledFont(NOTO_SANS_SC_SUBSET, 'Noto Sans SC');
+  await loadBundledFont(NOTO_EMOJI_SUBSET, EMOJI_HARNESS_FAMILY);
   setCJKMeasurementFamilies(['Noto Sans JP', 'Noto Sans SC']);
+  setEmojiMeasurementFamilies([EMOJI_HARNESS_FAMILY]);
 
   const corpus = await loadAllCorpora();
   const cases = casesFromCorpus(corpus, cfg);
@@ -373,8 +407,15 @@ export async function runHarness(
             c.maxWidth,
             c.lineHeight,
           );
-          const corrected = correctCJKLayout(
+          const cjkCorrected = correctCJKLayout(
             rtlCorrected,
+            c.text,
+            c.font,
+            c.maxWidth,
+            c.lineHeight,
+          );
+          const corrected = correctEmojiLayout(
+            cjkCorrected,
             c.text,
             c.font,
             c.maxWidth,

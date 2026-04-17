@@ -266,9 +266,26 @@ function packGraphemes(
  * - Returns the input unchanged when `measurementFamilies === []`
  *   (explicit opt-out).
  *
- * Otherwise, re-measures the text as a stream of grapheme clusters
- * against the chosen emoji-capable face, greedily packs them back into
- * lines, and returns a fresh layout.
+ * Otherwise, re-measures the text as a stream of grapheme clusters and
+ * greedily repacks them into lines. Each grapheme is measured against
+ * the font that a browser would actually shape it with: the emoji
+ * face for emoji clusters (matched by `EMOJI_DETECTOR`), the spec's
+ * original font for everything else. This mirrors a real browser's
+ * per-codepoint @font-face cascade and keeps the correction faithful
+ * when the registered emoji face does not itself cover Latin / other
+ * scripts.
+ *
+ * Historical note: v0.3 H6b measured every grapheme with the emoji
+ * face on the assumption that emoji-capable families (Segoe UI Emoji,
+ * Apple Color Emoji, Noto Color Emoji) all ship Latin glyphs as a
+ * side effect. That assumption broke once we started shipping a
+ * dedicated Noto Emoji subset (`ground-truth/fonts/NotoEmoji-subset.ttf`,
+ * v0.3 H6c) that is emoji-only by design. The harness wiring would
+ * have silently over-measured every Latin character as Noto Emoji's
+ * `.notdef` glyph (~1em), flipping under-wrap disagreements into
+ * over-wrap disagreements. Splitting the measurement per-grapheme is
+ * the correct contract regardless of whether the emoji face covers
+ * Latin, so we do it unconditionally.
  *
  * No monotonicity floor: emoji disagreements observed in the
  * 2026-04-17 ground-truth baseline split both ways (33 under-wrap,
@@ -292,10 +309,14 @@ export function correctEmojiLayout(
   const measurementFont = pickEmojiFamily(ctx, font, families);
   if (measurementFont === null) return pretextResult;
 
-  ctx.font = measurementFont;
   const graphemes = segmentByGrapheme(originalText);
   if (graphemes.length === 0) return pretextResult;
-  const widths = graphemes.map((g) => ctx.measureText(g).width);
+  const widths: number[] = new Array(graphemes.length);
+  for (let i = 0; i < graphemes.length; i += 1) {
+    const g = graphemes[i]!;
+    ctx.font = containsEmoji(g) ? measurementFont : font;
+    widths[i] = ctx.measureText(g).width;
+  }
 
   const laid = packGraphemes(graphemes, widths, maxWidth);
   if (laid.length === 0) return pretextResult;

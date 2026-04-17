@@ -108,7 +108,8 @@ may migrate into a structured format.
 
 **Date**: 2026-04-16 (amended 2026-04-16 for Phase F cross-engine sweep,
 re-amended 2026-04-16 after F2 Arabic RTL + F3 CJK kinsoku corrections,
-corpus re-scoped 2026-04-16 for F6 emoji stress expansion)
+corpus re-scoped 2026-04-16 for F6 emoji stress expansion, emoji
+floors re-raised 2026-04-17 after H6c bundled emoji harness font)
 **Status**: Accepted
 **Decision**: Every release candidate must measure the corpus against
 **Chromium, WebKit, and Firefox** via `ground-truth/run.ts --browser all`
@@ -123,7 +124,7 @@ points below measured:
 | en              | 97%   | 99.0% (95/96)            | Latin; one email-address soft-break edge     |
 | de              | 98%   | 99.1% (111/112)          | Latin + long compound words                  |
 | compound-words  | 95%   | 97.9% (47/48)            | Synthetic compounds; one Pretext edge        |
-| emoji           | 88%   | 90.0% (367/408)          | Font fallback variance; see FINDINGS §F6     |
+| emoji           | 98%   | 99.8% (407/408)          | H6c: Noto Emoji subset + per-grapheme split  |
 | zh              | 96%   | 98.8% (79/80)            | F3 CJK shim + Noto Sans SC subset in harness |
 | ja              | 93%   | 95.5% (84/88)            | F3 CJK shim + Noto Sans JP subset in harness |
 | ar              | 95%   | 97.9% (94/96)            | F2 RTL correction shim + Noto Sans Arabic    |
@@ -135,7 +136,7 @@ points below measured:
 | en              | 97%   | 99.0%                    | Same single URL edge as Chromium              |
 | de              | 98%   | 100.0%                   | Perfect on Latin long-compounds               |
 | compound-words  | 95%   | 97.9%                    | Same single Pretext edge                      |
-| emoji           | 88%   | 90.0%                    | Font fallback variance; see FINDINGS §F6      |
+| emoji           | 98%   | 99.8% (407/408)          | H6c: Noto Emoji subset + per-grapheme split   |
 | zh              | 95%   | 97.5% (78/80)            | Matches Chromium post-F3 within noise         |
 | ja              | 95%   | 97.7% (86/88)            | Best engine on kinsoku — matches shim output  |
 | ar              | 95%   | 97.9%                    | Identical to Chromium after F2 RTL correction |
@@ -147,20 +148,19 @@ points below measured:
 | en              | 93%   | 95.8%                    | Different URL wrap points for `https://` (PRELIGHT-FLAG) |
 | de              | 97%   | 99.1%                    | Same single long-compound edge                           |
 | compound-words  | 95%   | 97.9%                    | Same single Pretext edge                                 |
-| emoji           | 88%   | 90.0%                    | Font fallback variance; see FINDINGS §F6                 |
+| emoji           | 98%   | 99.8% (407/408)          | H6c: Noto Emoji subset + per-grapheme split              |
 | zh              | 96%   | 98.8% (79/80)            | Matches Chromium                                         |
 | ja              | 94%   | 96.6% (85/88)            | One more kinsoku-boundary edge than WebKit               |
 | ar              | 95%   | 97.9%                    | Matches Chromium/WebKit after F2 RTL correction          |
 
-Overall floor: **93%** per engine (lowest measured is Firefox 94.29%).
-Excluding emoji (which is font-fallback bound, not a Prelight correctness
-bug), overall agreement is **> 97.9% on every engine**.
+Overall floor: **93%** per engine. Post-H6c measured overall sits at
+98.28% chromium / 99.03% webkit / 98.60% firefox on the 928-case corpus.
 
 Any regression below a per-engine per-language floor blocks release.
 
 **Rationale**: Prelight's value is correctness relative to the browser.
 We have to prove it *and publish the shape of the error*, not claim it.
-Pretending 100% agreement when the real number is 94.5% overall (or 97.9%+ non-emoji) would be worse
+Pretending 100% agreement when the real number is 98%+ would be worse
 than publishing the gap, because real users would hit the gap and
 (correctly) lose trust.
 **Invalidation**: Bundling a larger emoji / CJK corpus (F6) or tightening

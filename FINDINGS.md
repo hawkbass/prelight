@@ -7,6 +7,216 @@ rewriting history.
 
 ---
 
+## 2026-04-17 — v0.3 H6c bundled emoji harness font: evidence status
+
+Environment: Windows 10.0.26200, Node 20 via `tsx` (Bun 1.3.11 is
+the primary runner but Playwright Chromium-over-CDP times out under
+Bun on Windows — DECISIONS #012 — so cross-engine runs go through
+`npx tsx`), `@prelight/core` post-H6b tree (committed after
+`13280d2`), Playwright 1.56 across chromium / webkit / firefox.
+Artifact: `ground-truth/cross-engine-h6c-2026-04-17.json`.
+
+### What was implemented
+
+The "emoji harness font" nice-to-have tracked on H6b's HANDOFF
+block lands here. The harness now ships a bundled, corpus-closed
+emoji subset on **both** sides of the oracle — browser via
+`@font-face` in `bootstrap.html`, canvas via
+`loadBundledFont` + `setEmojiMeasurementFamilies` — so the
+oracle's two sides measure the same SFNT, the same glyph IDs, and
+(with GSUB closure retained) the same ligature resolutions.
+
+- `ground-truth/fonts/NotoEmoji-subset.ttf` (611 KB) is the
+  committed subset of Google's `Noto-COLRv1.ttf` (tag `v2.051`,
+  SHA-256 pinned in `scripts/subset-emoji-font.ts`). Carries
+  `glyf`/`loca`/`cmap`/`GSUB`/`hmtx` for the 242 codepoints
+  `corpus/languages/emoji.json` exercises, GSUB-closed so ZWJ
+  sequences, skin-tone modifiers, keycap sequences, and regional-
+  indicator flags survive as ligature glyph IDs.
+- `ground-truth/harness.ts` registers the subset twice:
+  1. In `bootstrapHtml`, as an `@font-face` block aliased to
+     `font-family: 'Inter'` over a broad emoji `unicode-range`
+     (U+1F000–1FAFF, U+2600–27BF, U+FE00–FE0F, U+200D, U+20E3,
+     U+E0020–E007F). That makes the cascade fall through to our
+     subset on emoji codepoints while keeping Inter for Latin.
+  2. In `runHarness`, via `loadBundledFont(subsetPath, 'Prelight Noto Emoji')`
+     and `setEmojiMeasurementFamilies(['Prelight Noto Emoji'])`.
+- `packages/core/src/shape/emoji.ts` `correctEmojiLayout` now
+  measures per-grapheme with a font switch: emoji graphemes use
+  the resolved emoji family, non-emoji graphemes use the spec's
+  own `font`. H6b measured every grapheme against the emoji
+  family, which is correct for a full-color emoji face (which has
+  the same glyph set as the text font) but wrong for our subset
+  (which has no Latin glyphs and falls to `.notdef`).
+- `scripts/subset-emoji-font.ts` is the reproducible builder
+  (pinned source, sha256-verified). `probe-emoji-tables.ts`
+  reports the output's SFNT table list — used during the
+  investigation below to falsify multiple hypotheses about
+  color-table preservation.
+
+### Agreement numbers before and after
+
+`bun run test` unchanged (270 core tests pass, 407 total). The
+public-facing delta is ground-truth:
+
+| engine    | before H6c                    | after H6c                    | emoji before            | emoji after              |
+|-----------|-------------------------------|------------------------------|-------------------------|--------------------------|
+| chromium  | 911/928 (98.17%)              | 917/928 (**98.81%**)         | 367/408 (90.0%)         | 407/408 (**99.75%**)     |
+| webkit    | — (no prior cross-engine)     | 919/928 (**99.03%**)         | — (no harness face)     | 407/408 (**99.75%**)     |
+| firefox   | — (no prior cross-engine)     | 915/928 (**98.60%**)         | — (no harness face)     | 407/408 (**99.75%**)     |
+
+`PER_ENGINE_FLOORS` raised from 0.88 → 0.98 for emoji across all
+three engines. DECISIONS #008 updated in lockstep.
+
+The residual 1/408 differs per engine — chromium fails
+"⚠️ Unsaved changes", webkit fails "☀️ ❤️ ✈️ ⚠️ ⚡", firefox fails
+a comparable variation-selector sequence. All three trace to
+emoji presentation-selector (`U+FE0F`) cascade differences when
+the codepoint has a default text presentation: some engines
+honor `U+FE0F` by promoting the cascade to the emoji face for
+just that cluster, others trigger a full-line font switch that
+changes the Latin run's width. This is engine-specific font
+cascade behavior, not a systemic Prelight bug, and is left
+documented rather than "fixed" because chasing it would require
+per-engine cascade simulation inside `correctEmojiLayout` — a
+much larger surface area than the single case it would recover.
+
+### The investigation (three subsetter attempts)
+
+H6c took roughly three hours longer than estimated because the
+standard font-subsetting toolchain has undocumented color-table
+behavior. Documenting the path here so a future agent doesn't
+repeat it:
+
+**Attempt 1 — `subset-font` on NotoColorEmoji.ttf.**
+`subset-font@6` is the canonical Node subsetter (same library
+the CJK harness uses for Noto Sans JP / SC). Run against
+`NotoColorEmoji.ttf` with the corpus text, it produced a 20 KB
+output with no `CBDT`/`CBLC` tables. We initially assumed this
+was a `targetFormat` issue — tried `'truetype'`, `'sfnt'`,
+default — same result. Reading the library internals revealed
+the actual cause: `subset-font` calls
+`fontverter.convert(originalFont, 'truetype')` *before* handing
+bytes to hb-subset. `fontverter` rewrites the SFNT directory to
+its supported set and does not know about `CBDT`/`CBLC`, so the
+color bitmap tables are dropped before subsetting runs.
+`targetFormat` is the conversion *output* format, not a feature
+preservation flag — it's orthogonal to which tables survive.
+
+**Attempt 2 — direct `harfbuzzjs` WASM calls.**
+Hypothesis: bypass `subset-font` + `fontverter` entirely, call
+`hb_subset_or_fail()` on the raw NotoColorEmoji bytes. Added
+`harfbuzzjs@0.10.3` as a devDependency, wrote a direct WASM
+wrapper in `scripts/subset-emoji-font.ts`. Output: still 20 KB,
+still no `CBDT`/`CBLC`. Diagnosed by reading harfbuzzjs's build
+scripts: the published `hb-subset.wasm` is compiled with
+`-DHB_TINY`, which defines `HB_NO_COLOR` and `HB_NO_BITMAP` at
+compile time. harfbuzzjs's WASM *cannot* emit color or bitmap
+tables — the C code for those paths is dead-stripped at build.
+No npm-shipped WASM supports this, so the pure-JS path is
+blocked upstream.
+
+**Attempt 3 — monochrome via `Noto-COLRv1.ttf`'s `glyf` fallback.**
+Google's modern COLR/CPAL font ships `glyf` outlines as a
+fallback for renderers that don't understand COLRv1 — they're
+monochrome outline renditions of the same glyphs as the
+color-vector layers. `subset-font` + `fontverter.convert(_, 'truetype')`
+*also* doesn't know about COLR/CPAL, so `fontverter` drops them
+the same way it drops `CBDT`/`CBLC`, leaving `glyf` as the
+only glyph shape source. hb-subset then trims
+`glyf`/`loca`/`hmtx`/`cmap`/`GSUB` to just our corpus codepoints
+(plus whatever GSUB closure pulls in). The output is a legal,
+OTS-passing monochrome TrueType subset with the same advance
+widths as the source — which is what the oracle needs. Advance
+widths are the *only* thing measurement symmetry depends on;
+the color layers were irrelevant to this phase's goal.
+
+### Why this is fine for a measurement oracle (color is irrelevant)
+
+A hidden piece of context that justifies Path 3 as a landing
+(not a placeholder): measurement-time, both sides of the oracle
+care about *glyph advance widths*, not glyph *appearance*.
+`getBoundingClientRect()` on the browser side and
+`ctx.measureText()` on the canvas side both report advance widths
+as resolved by the shaper (HarfBuzz in both environments). A
+monochrome outline of a given glyph has the same `hmtx` advance
+as the color-bitmap or color-vector version — the glyph table
+varies, the metrics table does not. Color adds zero information
+to the oracle. It would only matter if we diffed rendered
+pixels, which Prelight explicitly does not do (ROADMAP v2.0
+"Visual regression without screenshots" is the relevant deferred
+scope). Color emoji via a grafted or rebuilt WASM is tracked as
+a follow-up that *could* restore visual fidelity in the harness
+output without changing any measurement number.
+
+### Why GSUB closure stays on (subset size trade)
+
+A mid-investigation optimization pass added `noLayoutClosure: true`
+to `subset-font`, which drops the subset from ~625 KB to ~110 KB.
+With closure disabled, chromium emoji agreement fell to 98.5%
+(401/408, 6 new over-wrap failures on keycap-1..5 and the
+England flag). Re-enabling closure recovered those 6/408. The
+failure mode: when HarfBuzz can't substitute a keycap sequence
+(e.g. `1` + `U+FE0F` + `U+20E3`) to its single ligature glyph,
+the canvas shaper falls back to per-codepoint measurement
+against our subset, the browser shaper falls back to per-
+codepoint cascade across the full font stack (some codepoints
+resolve to Inter, others to Noto Emoji) — and the two widths
+diverge. The 515 KB premium for closure is the cost of
+measurement symmetry on ligature sequences. Decision locked:
+keep closure on, accept the larger subset. Documented at the
+call site in `scripts/subset-emoji-font.ts`.
+
+### Per-grapheme font selection (the H6b correction bug)
+
+The initial H6c wiring preserved H6b's `correctEmojiLayout`
+semantics (measure every grapheme against the resolved emoji
+font). Result: chromium emoji *dropped* from 367/408 to 353/408
+(86.5%). Root cause: the bundled emoji subset has no Latin glyph
+coverage, so Latin graphemes in mixed text ("Launching 🚀")
+were resolved to the subset's `.notdef` glyph, measured with
+~1000 fUnits / ~0.5em width, which over-measured the Latin run
+vs. the browser (which kept Inter for Latin, cascaded to Noto
+Emoji only for 🚀). Fixed by making `correctEmojiLayout` measure
+each grapheme under a different font depending on
+`EMOJI_DETECTOR.test(g)` — emoji graphemes against the emoji
+family, non-emoji graphemes against the spec's own `font`.
+Parallels the split that `correctCJKLayout` has always done.
+Chromium emoji then rose from 353/408 → 401/408 (98.5%), then to
+407/408 (99.75%) when GSUB closure was re-enabled.
+
+### Bundle impact
+
+`@prelight/core`: 23.80 → 23.86 KB min / 8.97 → 8.99 KB gz
+(+0.06 KB min / +0.02 KB gz). The entire delta is the
+per-grapheme conditional in `correctEmojiLayout`. Within H6a's
+24.00 KB / 9.00 KB ceiling; ~0.14 KB min headroom remaining.
+H7 (runtime style probes) is the phase expected to breach the
+ceiling and trigger the next deliberate bump.
+
+### Artifacts
+
+- `scripts/subset-emoji-font.ts` — the reproducible builder.
+  Pins `Noto-COLRv1.ttf` to tag `v2.051`; SHA-256-verifies the
+  download; invokes `subset-font` with closure-on.
+- `scripts/probe-emoji-tables.ts` — SFNT inspector, used both
+  as part of the build pipeline's sanity check and as the
+  diagnostic that falsified Attempts 1 and 2 above.
+- `ground-truth/fonts/NotoEmoji-subset.ttf` — 611 KB committed
+  subset.
+- `ground-truth/cross-engine-h6c-2026-04-17.json` — post-H6c
+  3-engine dump; `cross-engine-2026-04-16.json` is retained as
+  the pre-H6c baseline for diff purposes.
+- `packages/core/src/shape/emoji.ts` — per-grapheme split.
+- `ground-truth/harness.ts` — `@font-face` + `loadBundledFont`
+  + `setEmojiMeasurementFamilies` wiring.
+- `ground-truth/run.ts` — `PER_ENGINE_FLOORS.*.emoji` re-raised
+  0.88 → 0.98.
+- `DECISIONS.md` — table updated to 99.8% emoji across all three
+  engines; overall floor restatement.
+
+---
+
 ## 2026-04-17 — v0.3 H6b `VerifySpec.measurementFonts.emoji`: evidence status
 
 Environment: Windows 10.0.26200, Bun 1.3.11, @prelight/core
