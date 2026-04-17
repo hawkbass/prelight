@@ -12,6 +12,7 @@ import { layoutWithLines, prepareWithSegments } from '@chenglou/pretext';
 import { assertCanvasReady, scaleFont } from './font.js';
 import { PREDICATES } from './predicates.js';
 import { correctCJKLayout } from './shape/cjk.js';
+import { correctEmojiLayout } from './shape/emoji.js';
 import { applyFitsInOneLineCorrection, correctRTLLayout } from './shape/rtl.js';
 import type {
   Failure,
@@ -86,13 +87,21 @@ export function verify(spec: VerifySpec): VerifyResult {
         spec.maxWidth,
         scaledLineHeight,
       );
-      const corrected = correctCJKLayout(
+      const cjkCorrected = correctCJKLayout(
         rtlCorrected,
         raw,
         scaledFont,
         spec.maxWidth,
         scaledLineHeight,
         spec.measurementFonts?.cjk,
+      );
+      const corrected = correctEmojiLayout(
+        cjkCorrected,
+        raw,
+        scaledFont,
+        spec.maxWidth,
+        scaledLineHeight,
+        spec.measurementFonts?.emoji,
       );
 
       const measuredWidth = corrected.lines.reduce(

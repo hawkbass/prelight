@@ -7,6 +7,185 @@ rewriting history.
 
 ---
 
+## 2026-04-17 — v0.3 H6b `VerifySpec.measurementFonts.emoji`: evidence status
+
+Environment: Windows 10.0.26200, Bun 1.3.11, @prelight/core
+post-H6a tree (committed after 68e5d3d), chromium single-engine
+ground-truth dump at `ground-truth/emoji-baseline-2026-04-17.json`.
+
+### What was implemented
+
+The `PRELIGHT-NEXT(v0.3 H6b)` marker in
+`packages/core/src/types.ts` — the emoji slot on
+`MeasurementFontFamilies` — is retired. The contract now lives on
+`VerifySpec.measurementFonts.emoji` and threads through `verify()`
+to a new `correctEmojiLayout` pass that sits immediately after
+`correctCJKLayout` in the correction chain.
+
+Surface changes:
+
+- `MeasurementFontFamilies.emoji?: string[]` — the new additive
+  slot. Semantics mirror `cjk` exactly: undefined falls through to
+  the module-level global; a non-empty list takes precedence; an
+  empty list (`emoji: []`) opts the emoji probe out for that spec.
+- New `correctEmojiLayout` in `packages/core/src/shape/emoji.ts`.
+  Returns the input layout unchanged when (a) the text has no
+  emoji codepoints, (b) the canvas shim is absent, (c) the probe
+  finds no registered emoji family, or (d) the resolved family
+  list is empty. Otherwise re-measures per extended grapheme
+  cluster and greedily re-packs at whitespace-first with
+  per-grapheme fallback.
+- New `containsEmoji`, `setEmojiMeasurementFamilies`,
+  `getEmojiMeasurementFamilies` exports from
+  `@prelight/core`. The detector regex
+  (`/[\p{Emoji_Presentation}\p{Extended_Pictographic}\p{Regional_Indicator}\uFE0F\u20E3]/u`)
+  mirrors Pretext's internal `maybeEmojiRe` so the two detectors
+  stay in lockstep.
+- `verify()` now chains `correctEmojiLayout` after
+  `correctCJKLayout`, forwarding `spec.measurementFonts?.emoji` as
+  the 6th argument. Order: RTL → fits-in-one-line → CJK → emoji.
+- Default module-level global is
+  `['Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji']` —
+  the three emoji faces shipped by the major desktop OSes.
+
+Departure from `correctCJKLayout`: **no monotonicity floor**.
+CJK under-wraps in one direction only (Pretext is conservative,
+browsers wrap more), so the CJK correction clamps to
+`laid.length >= pretextResult.lineCount`. Emoji failures observed
+empirically split both ways — 33 under-wrap, 8 over-wrap on the
+H6a baseline — so either direction is a legitimate correction
+target.
+
+Precedence (codified in the comment block above
+`EMOJI_MEASUREMENT_FAMILIES` in `shape/emoji.ts`):
+
+  per-call arg (VerifySpec.measurementFonts.emoji)
+    > module-level global (setEmojiMeasurementFamilies)
+    > no-op (correction disabled)
+
+### Empirical diagnosis
+
+Script: `scripts/analyze-emoji-disagreements.ts` (shipped as a
+research artifact, not part of the runtime product). Input:
+`ground-truth/emoji-baseline-2026-04-17.json`, the fresh
+chromium-only dump captured after H6a landed.
+
+```
+[chromium] emoji cases
+  total          : 408
+  agreeing       : 367 (90.0%)
+  failing        : 41
+    line count Δ : 41
+    height Δ only: 0
+  line-count Δ histogram (prelight − browser):
+    -2  (under-wrap)  ×  6
+    -1  (under-wrap)  × 27
+    +1  (over-wrap)   ×  8
+  failure rate by maxWidth:
+     80px  19/102  (18.6%)
+    120px  14/102  (13.7%)
+    200px   8/102  ( 7.8%)
+    320px   0/102  ( 0.0%)
+```
+
+All failures are line-count mismatches (zero height-only
+disagreements). The agreement floor matches the pre-H6a baseline
+(2026-04-16) to the case — nothing in H2–H6a moved emoji
+numbers, so the gap still traces to the same two mechanisms:
+
+- **Under-wrap (33/41)**: `@napi-rs/canvas` has no emoji-capable
+  fallback registered. Every emoji codepoint resolves to Inter's
+  `.notdef` glyph at fontSize/2 (verified:
+  `ctx.measureText('🎉')` = 8px at 16px Inter; ground-truth browser
+  renders the same glyph at ~18px via Segoe UI Emoji). Pretext
+  therefore under-measures every emoji run and under-wraps. H6b's
+  contract addresses exactly this: a consumer who registers an
+  emoji-capable face (e.g.
+  `loadBundledFont(emojiBytes, 'MyEmoji'); setEmojiMeasurementFamilies(['MyEmoji'])`)
+  drives `correctEmojiLayout` into a re-measurement pass that
+  matches the browser.
+- **Over-wrap (8/41)**: a distinct bug. Isolated `verify()` calls
+  on the 8 over-wrap cases return the correct (browser-matching)
+  line count, but the full harness dump records extra lines.
+  Suspect: harness case-ordering or Pretext's
+  `segmentMetricCaches` retaining prior-case state. Not fixed by
+  H6b; left for a dedicated investigation phase. The
+  scripts/analyze-emoji-disagreements.ts output calls these
+  out under the `line-count Δ = +1` bucket.
+
+### Available evidence (unit-test level)
+
+- **H6b corpus**: 12 new cases in
+  `packages/core/test/measurement-fonts.test.ts` (M13–M24),
+  mirroring M1–M12 from H6a exactly:
+
+  1. Direct `correctEmojiLayout` contract (M13–M19):
+     - M13: undefined override falls back to the global.
+     - M14: non-empty override takes precedence.
+     - M15: empty-array override opts out (short-circuits before
+       any ctx.font write). Note: this differs from M3, where the
+       CJK pass still runs its per-line measurement loop on the
+       input font.
+     - M16: override preserves family order.
+     - M17: non-emoji text short-circuits before any canvas
+       access.
+     - M18: per-call override doesn't mutate the global.
+     - M19: per-call isolation across successive calls.
+  2. `verify()` integration (M20–M24):
+     - M20: spec override reaches `correctEmojiLayout`.
+     - M21: omission uses the global.
+     - M22: `emoji: []` opts out end-to-end.
+     - M23: non-emoji text in `verify()` never triggers the emoji
+       probe even with `measurementFonts.emoji` set.
+     - M24: scale sweep routes the override through every cell.
+
+- **Full test run**: `bun run test` → 270 passed (270). No
+  regressions in the 12 H6a tests or the 258 pre-existing tests.
+
+### Not yet available (deferred)
+
+- **Ground-truth delta**: zero (0). H6b on its own does not move
+  the chromium number — the harness doesn't register an emoji
+  face, so the probe returns `null` and the correction is a
+  no-op. Moving the number requires shipping an emoji subset in
+  `ground-truth/fonts/`, loading it via `@font-face` in the
+  browser bootstrap, and calling
+  `setEmojiMeasurementFamilies(['…'])` in the harness startup.
+  Tracked on `ROADMAP.md` under "emoji harness font" — it's a
+  product decision (which face, color vs monochrome, how many
+  KB of corpus data) rather than a code change.
+- **Over-wrap diagnosis**: the 8 over-wrap cases reproduce only
+  in the full harness run, not in isolated `verify()` calls.
+  Reproducing them in a minimal harness and tracing through
+  Pretext's `segmentMetricCaches` is a separate investigation
+  phase.
+
+### Artifacts
+
+- `packages/core/src/shape/emoji.ts` — the correction pass.
+- `packages/core/src/types.ts` — `MeasurementFontFamilies.emoji`
+  slot, `PRELIGHT-NEXT(v0.3 H6b)` marker retired.
+- `packages/core/src/verify.ts` — threading.
+- `packages/core/src/index.ts` — four new public exports.
+- `packages/core/test/measurement-fonts.test.ts` — M13–M24.
+- `ground-truth/emoji-baseline-2026-04-17.json` — chromium
+  single-engine dump captured post-H6a, the input to the
+  analysis script.
+- `scripts/analyze-emoji-disagreements.ts` — the analysis
+  script itself. Runs on any dump matching the
+  `CrossEngineDump` shape. Shipped, not deleted.
+
+### Bundle impact
+
+`@prelight/core`: 22.01 → 23.80 KB min / 8.41 → 8.97 KB gz
+(+1.79 KB min / +0.56 KB gz). Within the existing 24.00 KB min /
+9.00 KB gz budget H6a raised; no bump required this phase.
+Remaining headroom is tight (~0.2 KB min); the next substantive
+phase (H7 runtime style probes or H8) will likely trigger the
+next bump.
+
+---
+
 ## 2026-04-17 — v0.3 H6a `VerifySpec.measurementFonts.cjk`: evidence status
 
 Environment: Windows 10.0.26200, Bun 1.3.11, @prelight/core

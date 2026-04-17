@@ -41,6 +41,12 @@ export {
   setCJKMeasurementFamilies,
 } from './shape/cjk.js';
 export {
+  containsEmoji,
+  correctEmojiLayout,
+  getEmojiMeasurementFamilies,
+  setEmojiMeasurementFamilies,
+} from './shape/emoji.js';
+export {
   addInsets,
   all as edgeInsetsAll,
   box,

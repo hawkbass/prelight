@@ -58,15 +58,24 @@ export interface Constraints {
  * this undefined and Prelight falls back to the module-level global
  * (`setCJKMeasurementFamilies`) and ultimately to the spec's own `font`.
  *
- * Passing `cjk: []` explicitly opts out of the CJK family probe for this
- * spec — the correction pass then uses the spec's `font` directly.
- *
- * PRELIGHT-NEXT(v0.3 H6b): add `emoji?: string[]` once the emoji probe
- * path lands. Additive only — no consumer of v0.3 H6a is affected.
+ * Passing `cjk: []` or `emoji: []` explicitly opts out of the relevant
+ * family probe for this spec — the correction pass then skips (emoji) or
+ * uses the spec's `font` directly (CJK).
  */
 export interface MeasurementFontFamilies {
   /** Ordered preference list of CJK-capable font families to probe. */
   cjk?: string[];
+  /**
+   * Ordered preference list of emoji-capable font families to probe.
+   * The first family in the list whose canvas measurement of the probe
+   * glyph (`🙂`, U+1F642) differs from the spec's `font` by more than
+   * 0.5px is selected for the emoji correction pass. When omitted, the
+   * module-level global (`setEmojiMeasurementFamilies`) is consulted;
+   * when that list is empty or no family is registered with the canvas
+   * backend, the emoji correction is a no-op and Pretext's original
+   * layout is returned unchanged.
+   */
+  emoji?: string[];
 }
 
 /**
@@ -89,9 +98,10 @@ export interface VerifySpec {
   languages?: string[];
   /**
    * Per-spec override of the family lists used for script-specific
-   * measurement passes (CJK in H6a; emoji in H6b). Undefined falls back
-   * to the module-level global; a non-empty list takes precedence over
-   * the global; an empty list (`cjk: []`) opts out of the probe entirely.
+   * measurement passes (CJK, emoji). Undefined falls back to the
+   * module-level global; a non-empty list takes precedence over the
+   * global; an empty list (`cjk: []` / `emoji: []`) opts out of the
+   * relevant probe entirely.
    */
   measurementFonts?: MeasurementFontFamilies;
 }

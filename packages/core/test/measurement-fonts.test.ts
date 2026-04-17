@@ -1,20 +1,26 @@
 /**
- * H6a contract tests for `VerifySpec.measurementFonts.cjk`.
+ * H6a/H6b contract tests for `VerifySpec.measurementFonts.{cjk,emoji}`.
  *
- * The canvas backend in unit tests is `@napi-rs/canvas`, which does not
- * have the `Noto Sans JP` / `Noto Sans SC` faces registered (ground-truth
- * registers them at startup). So we can't observe a *different family*
- * being picked in a unit test — every family probe resolves to the same
- * host font metrics. What we *can* observe is the sequence of family
- * candidates probed by the CJK correction pass, by swapping in a test-
- * local `OffscreenCanvas` stub that records every `ctx.font` assignment.
+ * The canvas backend in unit tests is `@napi-rs/canvas`, which has no
+ * CJK or emoji faces registered (ground-truth registers CJK subsets at
+ * startup; emoji stays unregistered). So we can't observe a *different
+ * family* being picked in a unit test — every family probe resolves to
+ * the same host font metrics. What we *can* observe is the sequence of
+ * family candidates probed by each correction pass, by swapping in a
+ * test-local `OffscreenCanvas` stub that records every `ctx.font`
+ * assignment.
  *
- * That's enough to prove the H6a contract wiring:
+ * That's enough to prove the contract wiring for both passes:
  *
  *   per-call arg  >  module-level global  >  spec's own `font`
  *
  * plus the `[]` opt-out, plus per-call isolation when the global
  * changes across calls.
+ *
+ * CJK probes M1-M12; emoji probes M13-M24 follow the same shape. The
+ * only structural difference is that `correctEmojiLayout` returns the
+ * input unchanged when the probe finds no emoji family (the CJK
+ * correction falls back to the spec's own `font` in that case).
  */
 
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
@@ -24,6 +30,11 @@ import {
   getCJKMeasurementFamilies,
   setCJKMeasurementFamilies,
 } from '../src/shape/cjk.js';
+import {
+  correctEmojiLayout,
+  getEmojiMeasurementFamilies,
+  setEmojiMeasurementFamilies,
+} from '../src/shape/emoji.js';
 import type { LayoutLike } from '../src/shape/rtl.js';
 import { verify } from '../src/verify.js';
 
@@ -34,6 +45,14 @@ const SEED_LAYOUT: LayoutLike = {
   lines: [{ text: '作業テスト', width: 120 }],
 };
 const CJK_TEXT = '作業テストの完了を確認してください';
+// Emoji seed: single-line Pretext output the emoji correction would
+// potentially rewrap if the probe found a registered emoji family.
+const EMOJI_SEED_LAYOUT: LayoutLike = {
+  lineCount: 1,
+  height: 24,
+  lines: [{ text: '🚀 Ship it 🚀', width: 60 }],
+};
+const EMOJI_TEXT = '🚀 Ship it 🚀';
 const FONT = '16px Inter';
 
 interface ProbeRecorder {
@@ -270,6 +289,189 @@ describe('H6a — VerifySpec.measurementFonts.cjk contract', () => {
       expect(result.cellsChecked).toBe(2);
       const probed = familyProbes(recorder).map(familyOf);
       // Both cells must have probed the per-call family.
+      const hits = probed.filter((f) => f === 'Scale-Fam').length;
+      expect(hits).toBeGreaterThanOrEqual(2);
+    });
+  });
+});
+
+describe('H6b — VerifySpec.measurementFonts.emoji contract', () => {
+  // Preserve and restore the module-level global so tests stay isolated.
+  let priorGlobal: readonly string[];
+  const recorder: ProbeRecorder = { fonts: [], measureCalls: 0 };
+  let restoreCanvas: (() => void) | null = null;
+
+  beforeEach(() => {
+    priorGlobal = getEmojiMeasurementFamilies();
+    recorder.fonts = [];
+    recorder.measureCalls = 0;
+    restoreCanvas = installProbeCanvas(recorder);
+  });
+
+  afterEach(() => {
+    if (restoreCanvas) restoreCanvas();
+    restoreCanvas = null;
+    setEmojiMeasurementFamilies([...priorGlobal]);
+  });
+
+  describe('correctEmojiLayout direct contract', () => {
+    test('M13: undefined override falls back to the module-level global', () => {
+      setEmojiMeasurementFamilies(['Global-A', 'Global-B']);
+      correctEmojiLayout(EMOJI_SEED_LAYOUT, EMOJI_TEXT, FONT, 200, 24);
+      const probed = familyProbes(recorder).map(familyOf);
+      expect(probed).toContain('Global-A');
+      expect(probed).toContain('Global-B');
+      expect(probed).not.toContain('Spec-A');
+    });
+
+    test('M14: non-empty override takes precedence over the global', () => {
+      setEmojiMeasurementFamilies(['Global-A', 'Global-B']);
+      correctEmojiLayout(EMOJI_SEED_LAYOUT, EMOJI_TEXT, FONT, 200, 24, [
+        'Spec-A',
+        'Spec-B',
+      ]);
+      const probed = familyProbes(recorder).map(familyOf);
+      expect(probed).toContain('Spec-A');
+      expect(probed).toContain('Spec-B');
+      expect(probed).not.toContain('Global-A');
+      expect(probed).not.toContain('Global-B');
+    });
+
+    test('M15: empty-array override opts out of the probe entirely', () => {
+      setEmojiMeasurementFamilies(['Global-A']);
+      correctEmojiLayout(EMOJI_SEED_LAYOUT, EMOJI_TEXT, FONT, 200, 24, []);
+      const probed = familyProbes(recorder).map(familyOf);
+      // `pickEmojiFamily` short-circuits on `families.length === 0`
+      // before writing any ctx.font, so the recorder sees zero
+      // assignments. Contrast M3, where the CJK pass still runs its
+      // per-line measurement loop on the spec's own font.
+      expect(probed).toEqual([]);
+      expect(recorder.measureCalls).toBe(0);
+    });
+
+    test('M16: override preserves family order (first candidate probed first)', () => {
+      correctEmojiLayout(EMOJI_SEED_LAYOUT, EMOJI_TEXT, FONT, 200, 24, [
+        'First',
+        'Second',
+        'Third',
+      ]);
+      const candidates = familyProbes(recorder)
+        .map(familyOf)
+        .filter((f) => f === 'First' || f === 'Second' || f === 'Third');
+      expect(candidates).toEqual(['First', 'Second', 'Third']);
+    });
+
+    test('M17: non-emoji text short-circuits before any canvas probe', () => {
+      correctEmojiLayout(
+        { lineCount: 1, height: 24, lines: [{ text: 'Hello', width: 50 }] },
+        'Hello world',
+        FONT,
+        200,
+        24,
+        ['Spec-A'],
+      );
+      expect(recorder.fonts).toEqual([]);
+      expect(recorder.measureCalls).toBe(0);
+    });
+
+    test('M18: per-call override does not mutate the module-level global', () => {
+      setEmojiMeasurementFamilies(['Global-A']);
+      correctEmojiLayout(EMOJI_SEED_LAYOUT, EMOJI_TEXT, FONT, 200, 24, [
+        'Spec-A',
+      ]);
+      expect(getEmojiMeasurementFamilies()).toEqual(['Global-A']);
+    });
+
+    test('M19: per-call override is isolated across successive calls', () => {
+      setEmojiMeasurementFamilies(['Global-A']);
+
+      correctEmojiLayout(EMOJI_SEED_LAYOUT, EMOJI_TEXT, FONT, 200, 24, [
+        'Spec-A',
+      ]);
+      const firstCall = familyProbes(recorder).map(familyOf);
+      expect(firstCall).toContain('Spec-A');
+      expect(firstCall).not.toContain('Global-A');
+
+      recorder.fonts = [];
+      correctEmojiLayout(EMOJI_SEED_LAYOUT, EMOJI_TEXT, FONT, 200, 24);
+      const secondCall = familyProbes(recorder).map(familyOf);
+      expect(secondCall).toContain('Global-A');
+      expect(secondCall).not.toContain('Spec-A');
+    });
+  });
+
+  describe('verify() integration', () => {
+    test('M20: spec.measurementFonts.emoji reaches correctEmojiLayout', () => {
+      const result = verify({
+        text: { en: EMOJI_TEXT },
+        font: FONT,
+        maxWidth: 200,
+        lineHeight: 24,
+        constraints: { maxLines: 10 },
+        measurementFonts: { emoji: ['Via-Spec'] },
+      });
+      expect(result.cellsChecked).toBe(1);
+      const probed = familyProbes(recorder).map(familyOf);
+      expect(probed).toContain('Via-Spec');
+    });
+
+    test('M21: omitting measurementFonts falls through to the global', () => {
+      setEmojiMeasurementFamilies(['Via-Global']);
+      verify({
+        text: { en: EMOJI_TEXT },
+        font: FONT,
+        maxWidth: 200,
+        lineHeight: 24,
+        constraints: { maxLines: 10 },
+      });
+      const probed = familyProbes(recorder).map(familyOf);
+      expect(probed).toContain('Via-Global');
+    });
+
+    test('M22: spec.measurementFonts.emoji = [] opts out end-to-end', () => {
+      setEmojiMeasurementFamilies(['Via-Global']);
+      verify({
+        text: { en: EMOJI_TEXT },
+        font: FONT,
+        maxWidth: 200,
+        lineHeight: 24,
+        constraints: { maxLines: 10 },
+        measurementFonts: { emoji: [] },
+      });
+      const probed = familyProbes(recorder).map(familyOf);
+      expect(probed).not.toContain('Via-Global');
+      // With the emoji probe opted out, pickEmojiFamily short-circuits
+      // before writing any ctx.font. Other passes (CJK/RTL) also
+      // short-circuit because EMOJI_TEXT is neither CJK nor RTL, so the
+      // recorder stays empty for this spec.
+      expect(probed).toEqual([]);
+    });
+
+    test('M23: non-emoji text in verify() never triggers the emoji probe even with measurementFonts set', () => {
+      verify({
+        text: { en: 'Hello world' },
+        font: FONT,
+        maxWidth: 200,
+        lineHeight: 24,
+        constraints: { maxLines: 1 },
+        measurementFonts: { emoji: ['Unused'] },
+      });
+      const probed = familyProbes(recorder).map(familyOf);
+      expect(probed).not.toContain('Unused');
+    });
+
+    test('M24: scale sweep routes measurementFonts.emoji through every cell', () => {
+      const result = verify({
+        text: { en: EMOJI_TEXT },
+        font: FONT,
+        maxWidth: 200,
+        lineHeight: 24,
+        constraints: { maxLines: 20 },
+        fontScales: [1, 1.5],
+        measurementFonts: { emoji: ['Scale-Fam'] },
+      });
+      expect(result.cellsChecked).toBe(2);
+      const probed = familyProbes(recorder).map(familyOf);
       const hits = probed.filter((f) => f === 'Scale-Fam').length;
       expect(hits).toBeGreaterThanOrEqual(2);
     });
