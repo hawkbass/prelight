@@ -1,34 +1,62 @@
 /**
- * Single-axis flex engine for v0.2 (G3).
+ * Single-axis flex engine.
  *
- * Implements CSS Flex Layout Module L1 §9.7 "Resolving Flexible
- * Lengths" for the no-wrap case. With no-wrap the algorithm is:
+ * Implements CSS Flex Layout Module L1 §9 ("Resolving Flexible
+ * Lengths") including multi-line wrapping (§9.3) and cross-axis
+ * alignment (§8.3). The core main-axis resolution is identical to
+ * the v0.2 (G3) engine; H1 (v0.3) adds a wrapping pre-pass that
+ * packs items into lines and then runs main-axis resolution per
+ * line, plus a cross-axis alignment pass.
  *
- *   1. For each item, determine its flex base size:
- *        - If `basis` is explicit, use it.
- *        - Otherwise use the item's main-axis outer size from its
- *          Box measurement.
- *   2. Clamp to [minMain, maxMain] per item to get the hypothetical
- *      main size.
- *   3. Compute free space = container.inner - sum(hypothetical) - gaps.
- *   4. If free > 0 and any item has `grow > 0`: distribute free
- *      space proportionally to `grow`.
- *   5. If free < 0 and any item has `shrink > 0`: distribute the
- *      deficit proportionally to `shrink × baseSize` (scaled flex
- *      shrink factor from the spec).
- *   6. Otherwise items stay at their hypothetical main sizes; the
- *      container overflows / has leftover space.
- *   7. Apply `justify-content` to distribute any remaining free
- *      space around / between items.
+ * Algorithm overview:
+ *
+ *   1. If `wrap === 'wrap'`, pack items into lines greedily using
+ *      each item's hypothetical outer main size (basis + margin),
+ *      breaking before any item that would push the line past
+ *      `container.innerMain`. With `wrap === 'nowrap'` (default),
+ *      all items go onto one line.
+ *   2. For each line, run the §9.7 main-axis resolution:
+ *        a. Determine flex base size (explicit basis, or item's
+ *           border-box main size).
+ *        b. Clamp to [minMain, maxMain] → hypothetical main size.
+ *        c. Compute free space = line.innerMain - sum(hypothetical)
+ *           - sum(margin) - totalGap.
+ *        d. If free > 0 and any item has `grow > 0`: distribute
+ *           free space proportionally to `grow`.
+ *        e. If free < 0 and any item has `shrink > 0`: distribute
+ *           the deficit proportionally to `shrink × baseSize`
+ *           (scaled flex shrink factor from the spec).
+ *        f. Otherwise items stay at their hypothetical main sizes;
+ *           the line overflows.
+ *   3. Apply `justify-content` per line to distribute leftover
+ *      main-axis free space around / between items.
+ *   4. Stack lines along the cross axis starting at cross-start,
+ *      separated by `crossGap` (defaults to `gap`).
+ *   5. For each line, apply `align-items`:
+ *        - `start` (default): items sit at the line's cross-start.
+ *        - `end`: items sit flush against the line's cross-end.
+ *        - `center`: items are centred in the line.
+ *        - `stretch`: items expand to the line's full cross size
+ *          (which is `innerCross` when defined and the flex is a
+ *          single line, otherwise the max cross-outer of the
+ *          line's items).
  *
  * PRELIGHT-INVARIANT: this engine is pure. It never calls into
  * Pretext, canvas, or the DOM. Given the same inputs it always
  * returns the same layout.
  *
- * PRELIGHT-NEXT(v0.3): wrap. Adds a wrapping pass that packs items
- * into lines, then runs the resolution above per line.
- * PRELIGHT-NEXT(v0.3): cross-axis `align-items` (baseline, stretch).
- * Today we surface the cross-axis dimension as-is on each item.
+ * PRELIGHT-NEXT(v0.3 H5): `align-items: 'baseline'`. Baseline
+ * alignment needs each item's first-baseline offset (from the
+ * item's border-box top to its primary text baseline). That value
+ * arrives with H5's `VerifySpec.measurementFonts` which threads
+ * font metrics (ascent/descent) through `Measurement`. Landing
+ * baseline alongside measurementFonts keeps the data and the
+ * algorithm colocated.
+ *
+ * PRELIGHT-NEXT(v0.4+): `align-content` (distribute cross-axis
+ * free space between wrapped lines). Today lines pack flush
+ * against the cross-start edge.
+ *
  * PRELIGHT-NEXT(v1.0): intrinsic flex-basis:content resolution.
  */
 
@@ -42,6 +70,8 @@ export type FlexJustify =
   | 'space-between'
   | 'space-around'
   | 'space-evenly';
+export type FlexWrap = 'nowrap' | 'wrap';
+export type FlexAlign = 'start' | 'end' | 'center' | 'stretch';
 
 export interface FlexItem {
   box: Box;
@@ -67,14 +97,37 @@ export interface FlexContainer {
    * and border. Callers typically compute this from a parent Box.
    */
   innerMain: number;
-  /** Gap between items (both CSS `gap` and `column-gap`/`row-gap`). */
+  /** Gap between items along the main axis (CSS `column-gap` for
+   *  row, `row-gap` for column). Also used for between-line gap if
+   *  `crossGap` is not supplied, matching the CSS `gap` shorthand. */
   gap?: number;
+  /**
+   * Between-line gap along the cross axis when `wrap === 'wrap'`.
+   * Defaults to `gap`. Corresponds to the second value in the CSS
+   * `gap: <row> <column>` shorthand (with role swap for `column`
+   * direction).
+   */
+  crossGap?: number;
   direction?: FlexDirection;
   justify?: FlexJustify;
   /**
-   * The container's inner cross-axis size. Currently only used by
-   * `fitsFlex` for overflow detection on the cross axis; the
-   * engine itself is single-axis.
+   * Single-line (`'nowrap'`, default) or multi-line (`'wrap'`). In
+   * `'wrap'` mode items that do not fit on the current line move
+   * to a fresh line at the line-start of the next cross-axis row.
+   */
+  wrap?: FlexWrap;
+  /**
+   * Cross-axis alignment for items within each line. Defaults to
+   * `'start'`. `'stretch'` expands items to fill the line's cross
+   * size (or the container's `innerCross` on single-line layouts
+   * where it is defined).
+   */
+  align?: FlexAlign;
+  /**
+   * The container's inner cross-axis size. Required for meaningful
+   * `'stretch'` behaviour on a single line and for cross-axis
+   * overflow detection (via `fitsFlex`). May be left undefined
+   * when the container's cross axis is intrinsic.
    */
   innerCross?: number;
 }
@@ -85,18 +138,55 @@ export interface FlexItemLayout {
   main: number;
   /** Position along the main axis, from the container's inner edge. */
   offset: number;
-  /** Cross-axis size (unchanged for no-wrap, no-stretch). */
+  /**
+   * Cross-axis size. For `align: 'start' | 'end' | 'center'` this
+   * is the item's natural cross outer size. For `align: 'stretch'`
+   * it is expanded to the line's cross extent (minus the item's
+   * cross-axis margin).
+   */
   cross: number;
+  /**
+   * Position along the cross axis, from the container's inner
+   * cross-start edge. Includes the item's leading cross-axis
+   * margin.
+   */
+  crossOffset: number;
+}
+
+export interface FlexLineLayout {
+  items: FlexItemLayout[];
+  /** Total main-axis extent consumed by this line's items + gaps. */
+  mainExtent: number;
+  /** Cross-axis position of the line's start, from the container's
+   *  inner cross-start edge. */
+  crossStart: number;
+  /** Cross-axis extent of this line (max of item crossOuter; expanded
+   *  to `innerCross` for single-line stretch when available). */
+  crossSize: number;
 }
 
 export interface FlexLayout {
+  /** Flattened item list across all lines. Index order matches
+   *  input item order. */
   items: FlexItemLayout[];
-  /** Total length of all items + gaps along the main axis. */
+  /** One entry per line. For `wrap: 'nowrap'` this is a single
+   *  line containing every item. */
+  lines: FlexLineLayout[];
+  /** Largest `line.mainExtent` across all lines. On `nowrap` this
+   *  equals the single line's main extent. */
   contentMain: number;
-  /** Leftover (positive) or excess (negative) main space. */
+  /** Total cross-axis extent consumed by lines + between-line gaps. */
+  contentCross: number;
+  /** `container.innerMain - contentMain`. Negative when the widest
+   *  line exceeds the container. */
   freeSpace: number;
-  /** True when `contentMain` exceeds `container.innerMain`. */
+  /** True when any line's `mainExtent` exceeds `container.innerMain`.
+   *  On `wrap` this only happens when a single item is larger than
+   *  the container (wrapping places it on its own line). */
   overflows: boolean;
+  /** True when `contentCross` exceeds `container.innerCross` (only
+   *  when `innerCross` is defined). */
+  crossOverflows: boolean;
   direction: FlexDirection;
 }
 
@@ -125,6 +215,16 @@ function mainMargin(edges: EdgeInsets, direction: FlexDirection): number {
   return edges.top + edges.bottom;
 }
 
+function crossMargin(edges: EdgeInsets, direction: FlexDirection): number {
+  if (direction === 'row') return edges.top + edges.bottom;
+  return edges.left + edges.right;
+}
+
+function leadingCrossMargin(edges: EdgeInsets, direction: FlexDirection): number {
+  if (direction === 'row') return edges.top;
+  return edges.left;
+}
+
 // ────────────────────────────────────────────────────────────────
 // Resolve main sizes (CSS Flex L1 §9.7)
 // ────────────────────────────────────────────────────────────────
@@ -138,9 +238,6 @@ interface ResolvedSize {
 
 function flexBaseSize(item: FlexItem, direction: FlexDirection): number {
   if (typeof item.basis === 'number') return item.basis;
-  // Default basis is the item's border-box main size (excludes
-  // margin, since margin is added separately as an outer-size
-  // contribution).
   return direction === 'row'
     ? item.box.borderBoxWidth
     : item.box.borderBoxHeight;
@@ -152,10 +249,10 @@ function clamp(value: number, min: number, max: number): number {
 
 function resolveFlex(
   items: FlexItem[],
-  container: FlexContainer,
+  innerMain: number,
+  gap: number,
   direction: FlexDirection,
 ): ResolvedSize[] {
-  const gap = container.gap ?? 0;
   const totalGap = items.length > 1 ? gap * (items.length - 1) : 0;
   const marginMain = items.map((i) => mainMargin(i.box.margin, direction));
   const bases = items.map((i) => flexBaseSize(i, direction));
@@ -166,12 +263,11 @@ function resolveFlex(
   const occupied = hypothetical.reduce((a, b) => a + b, 0)
     + marginMain.reduce((a, b) => a + b, 0)
     + totalGap;
-  const freeSpace = container.innerMain - occupied;
+  const freeSpace = innerMain - occupied;
 
   const borderBoxSizes = [...hypothetical];
 
   if (freeSpace > 0) {
-    // Grow resolution.
     const grows = items.map((i) => i.grow ?? 0);
     const totalGrow = grows.reduce((a, b) => a + b, 0);
     if (totalGrow > 0) {
@@ -190,9 +286,6 @@ function resolveFlex(
     const scaledShrinks = shrinks.map((s, i) => s * bases[i]!);
     const totalScaled = scaledShrinks.reduce((a, b) => a + b, 0);
     if (totalScaled > 0) {
-      // Distribute the deficit. The spec's iterative freezing step
-      // only matters when min/max clamps bind; for the common case
-      // we get within sub-pixel agreement of Chromium in one pass.
       for (let i = 0; i < items.length; i++) {
         const share = (scaledShrinks[i]! / totalScaled) * freeSpace;
         borderBoxSizes[i] = clamp(
@@ -205,7 +298,7 @@ function resolveFlex(
       // remaining deficit among the unfrozen items. Handles "two
       // items shrink, one hits min-width: 40" cases.
       const residual =
-        container.innerMain -
+        innerMain -
         (borderBoxSizes.reduce((a, b) => a + b, 0) +
           marginMain.reduce((a, b) => a + b, 0) +
           totalGap);
@@ -241,31 +334,82 @@ function resolveFlex(
 }
 
 // ────────────────────────────────────────────────────────────────
-// Justify distribution
+// Wrap packing (CSS Flex L1 §9.3)
+// ────────────────────────────────────────────────────────────────
+
+/**
+ * Pack items into lines greedily by their hypothetical outer main
+ * size (base size clamped to min/max, plus leading margin, plus
+ * trailing margin, plus gap). An item that by itself exceeds
+ * `innerMain` still gets placed alone on its own line (per the
+ * spec; the line is flagged as overflowing later).
+ *
+ * This function operates on input-order indices and does NOT
+ * resolve grow/shrink — that happens per line after packing. Using
+ * hypothetical size for the packing decision matches Chromium and
+ * Firefox; items that would shrink to fit still move to the next
+ * line if their hypothetical size overflows.
+ */
+function packLines(
+  items: FlexItem[],
+  innerMain: number,
+  gap: number,
+  direction: FlexDirection,
+): FlexItem[][] {
+  if (items.length === 0) return [];
+  const lines: FlexItem[][] = [];
+  let current: FlexItem[] = [];
+  let currentExtent = 0;
+  for (let idx = 0; idx < items.length; idx++) {
+    const item = items[idx]!;
+    const base = flexBaseSize(item, direction);
+    const hypothetical = clamp(
+      base,
+      item.minMain ?? 0,
+      item.maxMain ?? Infinity,
+    );
+    const outer = hypothetical + mainMargin(item.box.margin, direction);
+
+    if (current.length === 0) {
+      current.push(item);
+      currentExtent = outer;
+      continue;
+    }
+    const nextExtent = currentExtent + gap + outer;
+    if (nextExtent > innerMain + 0.5) {
+      lines.push(current);
+      current = [item];
+      currentExtent = outer;
+    } else {
+      current.push(item);
+      currentExtent = nextExtent;
+    }
+  }
+  if (current.length > 0) lines.push(current);
+  return lines;
+}
+
+// ────────────────────────────────────────────────────────────────
+// Justify distribution (per line)
 // ────────────────────────────────────────────────────────────────
 
 function applyJustify(
   sizes: ResolvedSize[],
-  container: FlexContainer,
+  innerMain: number,
+  gap: number,
+  justify: FlexJustify,
   direction: FlexDirection,
   items: FlexItem[],
 ): { offsets: number[]; contentMain: number; freeSpace: number } {
-  const gap = container.gap ?? 0;
   const totalGap = items.length > 1 ? gap * (items.length - 1) : 0;
   const itemsMain = sizes.reduce((a, s) => a + s.outerMain, 0);
   const contentMain = itemsMain + totalGap;
-  const freeSpace = container.innerMain - contentMain;
-  const justify = container.justify ?? 'start';
+  const freeSpace = innerMain - contentMain;
 
   const offsets = new Array<number>(items.length);
-  // Start with every item packed flush at 0 with `gap` between them,
-  // then shift by the justify offset.
   let cursor = 0;
   const leadingOffsets: number[] = [];
   for (let i = 0; i < items.length; i++) {
-    // Include the item's leading margin contribution in its offset
-    // so `offset` names the item's border-box position, not its
-    // outer position.
     const leadingMargin =
       direction === 'row' ? items[i]!.box.margin.left : items[i]!.box.margin.top;
     leadingOffsets[i] = cursor + leadingMargin;
@@ -309,6 +453,49 @@ function applyJustify(
 }
 
 // ────────────────────────────────────────────────────────────────
+// Cross-axis alignment
+// ────────────────────────────────────────────────────────────────
+
+/**
+ * Compute per-item cross sizes and cross offsets within a line.
+ * `lineCrossSize` is the line's cross extent (already decided by
+ * the caller). For `stretch`, items expand to fill the line
+ * minus their cross-axis margin. For `start | end | center`,
+ * items keep their natural cross-outer size and are positioned
+ * within the line.
+ */
+function applyAlign(
+  items: FlexItem[],
+  lineCrossSize: number,
+  align: FlexAlign,
+  direction: FlexDirection,
+): { cross: number[]; crossOffset: number[] } {
+  const cross = new Array<number>(items.length);
+  const crossOffset = new Array<number>(items.length);
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]!;
+    const leading = leadingCrossMargin(item.box.margin, direction);
+    const margin = crossMargin(item.box.margin, direction);
+    const naturalOuter = crossOuter(item.box, direction);
+    const naturalBorderBox = naturalOuter - margin;
+
+    if (align === 'stretch') {
+      const stretched = Math.max(0, lineCrossSize - margin);
+      cross[i] = stretched;
+      crossOffset[i] = leading;
+    } else {
+      cross[i] = naturalBorderBox;
+      const slack = lineCrossSize - naturalOuter;
+      let bias = 0;
+      if (align === 'end') bias = slack;
+      else if (align === 'center') bias = slack / 2;
+      crossOffset[i] = leading + bias;
+    }
+  }
+  return { cross, crossOffset };
+}
+
+// ────────────────────────────────────────────────────────────────
 // Public: computeFlexLayout
 // ────────────────────────────────────────────────────────────────
 
@@ -317,38 +504,143 @@ export function computeFlexLayout(
   container: FlexContainer,
 ): FlexLayout {
   const direction = container.direction ?? 'row';
+  const wrap = container.wrap ?? 'nowrap';
+  const align = container.align ?? 'start';
+  const justify = container.justify ?? 'start';
+  const gap = container.gap ?? 0;
+  const crossGap = container.crossGap ?? gap;
+
   if (items.length === 0) {
     return {
       items: [],
+      lines: [],
       contentMain: 0,
+      contentCross: 0,
       freeSpace: container.innerMain,
       overflows: false,
+      crossOverflows: false,
       direction,
     };
   }
 
-  const sizes = resolveFlex(items, container, direction);
-  const { offsets, contentMain, freeSpace } = applyJustify(
-    sizes,
-    container,
-    direction,
-    items,
-  );
+  // Phase 1: pack items into lines.
+  const lineItems: FlexItem[][] =
+    wrap === 'wrap'
+      ? packLines(items, container.innerMain, gap, direction)
+      : [items.slice()];
 
-  const laidOut: FlexItemLayout[] = items.map((item, i) => ({
-    box: item.box,
-    main: sizes[i]!.borderBoxMain,
-    offset: offsets[i]!,
-    cross: crossOuter(item.box, direction),
-  }));
+  // Phase 2: resolve main-axis sizes and justify per line.
+  interface LineResolved {
+    items: FlexItem[];
+    sizes: ResolvedSize[];
+    offsets: number[];
+    contentMain: number;
+    freeSpace: number;
+  }
+  const resolved: LineResolved[] = lineItems.map((lineSet) => {
+    const sizes = resolveFlex(lineSet, container.innerMain, gap, direction);
+    const j = applyJustify(
+      sizes,
+      container.innerMain,
+      gap,
+      justify,
+      direction,
+      lineSet,
+    );
+    return {
+      items: lineSet,
+      sizes,
+      offsets: j.offsets,
+      contentMain: j.contentMain,
+      freeSpace: j.freeSpace,
+    };
+  });
 
+  // Phase 3: decide each line's cross size.
+  // - Natural: max crossOuter of the line's items.
+  // - Single-line + innerCross defined: expand to at least
+  //   innerCross so that `align-items: {start|end|center|stretch}`
+  //   position within the container's full cross axis (CSS Flex
+  //   L1 §9.4: single-line definite-cross flex lines take the
+  //   container's inner cross size). If the tallest item still
+  //   exceeds innerCross the line grows to fit (with
+  //   crossOverflows reported).
+  //
+  // Multi-line (`wrap: 'wrap'`): each line's cross size is the
+  // max crossOuter of its items. `align-content` (distributing
+  // unused container cross space between lines) is deferred to a
+  // future release — today lines pack flush against the
+  // cross-start edge.
+  const lineCrossSizes: number[] = resolved.map((line) => {
+    let max = 0;
+    for (const it of line.items) {
+      max = Math.max(max, crossOuter(it.box, direction));
+    }
+    return max;
+  });
+  const singleLine = resolved.length === 1;
+  if (singleLine && typeof container.innerCross === 'number') {
+    lineCrossSizes[0] = Math.max(lineCrossSizes[0]!, container.innerCross);
+  }
+
+  // Phase 4: stack lines along cross axis + apply align-items.
+  const lines: FlexLineLayout[] = [];
+  const flatItems: FlexItemLayout[] = new Array(items.length);
+  let crossCursor = 0;
+  let maxMainExtent = 0;
+  for (let li = 0; li < resolved.length; li++) {
+    const line = resolved[li]!;
+    const lineCrossSize = lineCrossSizes[li]!;
+    const { cross, crossOffset } = applyAlign(
+      line.items,
+      lineCrossSize,
+      align,
+      direction,
+    );
+
+    const laidOut: FlexItemLayout[] = line.items.map((_item, i) => ({
+      box: line.items[i]!.box,
+      main: line.sizes[i]!.borderBoxMain,
+      offset: line.offsets[i]!,
+      cross: cross[i]!,
+      crossOffset: crossCursor + crossOffset[i]!,
+    }));
+
+    lines.push({
+      items: laidOut,
+      mainExtent: line.contentMain,
+      crossStart: crossCursor,
+      crossSize: lineCrossSize,
+    });
+    maxMainExtent = Math.max(maxMainExtent, line.contentMain);
+
+    // Write back into the flat `items` array at the original indices.
+    let writeIdx = 0;
+    for (let li2 = 0; li2 < li; li2++) writeIdx += resolved[li2]!.items.length;
+    for (let i = 0; i < laidOut.length; i++) {
+      flatItems[writeIdx + i] = laidOut[i]!;
+    }
+
+    crossCursor += lineCrossSize;
+    if (li < resolved.length - 1) crossCursor += crossGap;
+  }
+
+  const contentCross = crossCursor;
+  const contentMain = maxMainExtent;
+  const freeSpace = container.innerMain - contentMain;
   const overflows = contentMain > container.innerMain + 0.5;
+  const crossOverflows =
+    typeof container.innerCross === 'number' &&
+    contentCross > container.innerCross + 0.5;
 
   return {
-    items: laidOut,
+    items: flatItems,
+    lines,
     contentMain,
+    contentCross,
     freeSpace,
     overflows,
+    crossOverflows,
     direction,
   };
 }
@@ -369,12 +661,13 @@ export interface FitsFlexResult {
 }
 
 /**
- * Returns `ok: true` when the container holds every child on one
- * line with no main-axis overflow and no cross-axis overflow. Does
- * not mutate inputs.
+ * Returns `ok: true` when every line fits within the container's
+ * main axis and the stacked lines fit within the container's
+ * cross axis (when `innerCross` is supplied). Does not mutate
+ * inputs.
  *
- * Callers layering additional constraints (min-width floors, aspect
- * ratios) should inspect `layout.items` directly.
+ * On `wrap: 'nowrap'` this reduces to the v0.2 behaviour: one
+ * line must hold every child without main-axis overflow.
  */
 export function fitsFlex(spec: FitsFlexSpec): FitsFlexResult {
   const layout = computeFlexLayout(spec.children, spec.container);
@@ -385,16 +678,25 @@ export function fitsFlex(spec: FitsFlexSpec): FitsFlexResult {
     );
   }
   if (spec.container.innerCross !== undefined) {
-    const maxCross = layout.items.reduce((m, it) => Math.max(m, it.cross), 0);
-    if (maxCross > spec.container.innerCross + 0.5) {
+    if (layout.crossOverflows) {
       reasons.push(
-        `cross-axis overflow: ${maxCross.toFixed(1)}px > inner ${spec.container.innerCross}px`,
+        `cross-axis overflow: ${layout.contentCross.toFixed(1)}px > inner ${spec.container.innerCross}px`,
       );
+    } else if ((spec.container.wrap ?? 'nowrap') === 'nowrap') {
+      // On nowrap, `crossOverflows` reports the single line's
+      // cross extent. We also want to flag a line whose max item
+      // crossOuter exceeds innerCross even when contentCross has
+      // already been clamped. In practice the two match because
+      // lineCrossSize is the max crossOuter for non-stretch align
+      // modes, so this branch is a belt-and-braces check.
+      const line = layout.lines[0];
+      if (line !== undefined && line.crossSize > spec.container.innerCross + 0.5) {
+        reasons.push(
+          `cross-axis overflow: ${line.crossSize.toFixed(1)}px > inner ${spec.container.innerCross}px`,
+        );
+      }
     }
   }
-  // Items hitting their min-main while shrinking indicate a design
-  // that would clip or truncate under stress. Surface as a reason
-  // but do not fail on its own — clamp-at-min is valid CSS.
   return {
     ok: reasons.length === 0,
     layout,

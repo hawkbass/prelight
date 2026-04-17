@@ -7,6 +7,91 @@ rewriting history.
 
 ---
 
+## 2026-04-17 — v0.3 H1 flex-wrap + align-items: evidence gap on browser confirmation
+
+Environment: Windows 10.0.26200, Bun 1.3.11, @prelight/core internal
+build (uncommitted), no browser run.
+
+### What was implemented
+
+`@prelight/core/layout/flex.ts` gained:
+
+- **Wrap packing** (`FlexContainer.wrap: 'wrap'`): greedy line-breaking
+  by hypothetical outer main size, per CSS Flex L1 §9.3. Margins,
+  gaps, and `minMain`/`maxMain` clamps all participate in the packing
+  decision; grow/shrink do not (they are resolved per-line after
+  packing, matching Chromium / Firefox / Safari behaviour).
+- **Cross-axis alignment** (`FlexContainer.align: 'start' | 'end' |
+  'center' | 'stretch'`): per CSS Flex L1 §8.3, with single-line +
+  definite `innerCross` using the container's inner cross size as
+  the line cross size (§9.4).
+- New layout fields: `FlexLayout.lines`, `contentCross`,
+  `crossOverflows`; `FlexItemLayout.crossOffset`; `FlexLineLayout`
+  (new type).
+- `align-items: 'baseline'` explicitly deferred to H5 where font
+  ascent values thread through `VerifySpec.measurementFonts`.
+
+### Evidence available
+
+- **32 new unit tests** in `packages/core/test/flex.test.ts`
+  (C41–C72) covering wrap packing, align-items modes, and
+  wrap × align integration.
+- **40 pre-existing v0.2 flex tests (C01–C40) unchanged and still
+  passing** — the rewrite preserves v0.2 no-wrap + `align: 'start'`
+  behaviour byte-for-byte.
+- **Per-test comments trace each expected value to the CSS spec
+  clause it enforces** (§9.3 packing, §9.7 main-axis resolution,
+  §8.3 cross-axis alignment, §9.4 single-line cross size).
+
+### Evidence MISSING
+
+- **Zero browser-confirmed cases for wrap or align-items.** The
+  existing `ground-truth/harness.ts` is exclusively a text-layout
+  oracle: it renders corpus strings via Playwright and compares
+  `getBoundingClientRect()` height + `Range.getClientRects()`
+  line count against what `@prelight/core::verify()` predicts.
+  There is no corpus schema for flex specs, no Playwright-side
+  per-item border-box-rect extraction, no cross-engine tolerance
+  model calibrated for sub-pixel flex rounding differences.
+- Consequently, **no public-facing documentation in this release
+  may claim "flex-wrap / align-items verified against Chromium /
+  WebKit / Firefox"**. The CHANGELOG Phase H1 entry complies with
+  this constraint: it says "32 new unit tests" and "browser-confirmed
+  ground-truth is not in this release".
+
+### Planned path
+
+Building a flex ground-truth harness is a distinct multi-day phase:
+
+1. Flex-corpus schema — serialisable `{ container, items,
+   expectedLines, expectedItemRects }` fixtures.
+2. Playwright renderer that mounts each fixture into a clean DOM
+   and extracts per-item `getBoundingClientRect()` relative to the
+   container's padding-box.
+3. Tolerance model — cross-engine sub-pixel rounding diverges
+   meaningfully on wrapped flex (Chromium rounds differently from
+   Firefox on row-gap); calibrate per-case tolerance the way
+   `defaultHarnessConfig.tolerancePx` does for text.
+4. Per-engine floors — decide whether flex lands with the same
+   100% agreement claim as text, or (more honestly) starts with a
+   published floor calibrated from measurement.
+
+This is scheduled as either **H9 of v0.3** (if we extend the v0.3
+scope to include the harness), or a **standalone pre-v0.3.0 phase**
+run after H8 governance but before tagging. Choice is pending user
+input; see `HANDOFF.md` §2026-04-17 for the decision record.
+
+### Why this entry exists
+
+Per the evidence invariant: every empirical claim in a
+public-facing doc traces to a dated `FINDINGS.md` entry from a
+real run. H1's public claims are limited to "unit tests pass" and
+"CSS spec traceability in test comments", both of which this entry
+backs. No claim of cross-engine verification is made until the
+harness exists and produces measurements.
+
+---
+
 ## 2026-04-16 — v0.1 scaffold session
 
 Environment: Windows 10.0.26200, Bun 1.3.11, Node 22.x runtime, pretext 0.0.3,

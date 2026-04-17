@@ -6,6 +6,62 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Phase H1 — v0.3 flex-wrap + align-items (2026-04-17)
+
+- **Flex-wrap (multi-line)** in `@prelight/core/layout/flex.ts`: new
+  `FlexContainer.wrap: 'nowrap' | 'wrap'` option. With `wrap: 'wrap'`,
+  a pre-pass packs items into lines greedily by hypothetical outer main
+  size (basis clamped to `minMain`/`maxMain`, plus margin, plus gap),
+  breaking before any item whose addition would push the current line
+  past `container.innerMain`. Each line then runs the existing §9.7
+  main-axis resolution independently — grow/shrink only operate within
+  a single line, matching Chromium / Firefox / Safari behaviour.
+- **Cross-axis alignment** via new `FlexContainer.align: 'start' |
+  'end' | 'center' | 'stretch'` option. For `start | end | center`,
+  items keep their natural cross outer size and are positioned within
+  the line's cross extent. For `stretch`, items expand to the line's
+  cross size minus their cross-axis margins. Single-line flex with
+  `innerCross` defined uses the container's inner cross size as the
+  line size (CSS Flex L1 §9.4); multi-line flex uses each line's
+  natural max-sibling cross size. `align-items: 'baseline'` is
+  explicitly deferred to H5, where it lands together with the font
+  ascent values threaded through `VerifySpec.measurementFonts` — a
+  stub that silently falls back to `start` would violate the
+  evidence invariant.
+- **New layout fields** on `FlexLayout`: `lines: FlexLineLayout[]`
+  (one entry per wrapped line; single entry for `nowrap`), `contentCross`
+  (total cross-axis extent), `crossOverflows` (true when
+  `contentCross > innerCross`). `FlexItemLayout` gains `crossOffset`
+  (item position along the cross axis from the container's
+  cross-start). Existing fields (`items`, `contentMain`, `freeSpace`,
+  `overflows`, `direction`) keep their v0.2 meaning on single-line
+  layouts; on wrap, `contentMain = max(line.mainExtent)` so the
+  overflow semantics stay consistent.
+- **New exports**: `FlexWrap`, `FlexAlign`, `FlexLineLayout` types.
+- **Backwards compatibility**: all 40 v0.2 flex tests pass unchanged.
+  The default `wrap: 'nowrap'` + default `align: 'start'` path is
+  byte-identical in behaviour to the v0.2 engine. (H1)
+- **Evidence**: 32 new unit tests in `packages/core/test/flex.test.ts`
+  (C41–C72) covering wrap packing, align-items modes, and wrap ×
+  align integration. **Browser-confirmed ground-truth is not in
+  this release** — the existing harness is a text-layout oracle with
+  no flex-container infrastructure. Building a flex ground-truth
+  harness is a distinct multi-day phase; see `FINDINGS.md`
+  §2026-04-17 for the full evidence-status note and the planned
+  path (H9 or a standalone pre-v0.3.0 phase, depending on
+  scheduling). (H1)
+- **Bundle budget bump**: `@prelight/core` 18.00 KB min / 7.00 KB gz
+  → 20.00 KB min / 8.00 KB gz to absorb the wrap + align code (actual
+  measured: 18.55 KB min / 7.25 KB gz, so ~1.45 KB min headroom
+  remains for H2–H8). Budget bump is a deliberate, documented
+  choice, not a slip. (H1)
+- **Test-count carry-forward from v0.2.0-rc completion review**:
+  `CHANGELOG.md`'s Phase G test count is corrected from 254 → 269
+  to match what actually shipped. The paired `AGENTS.md` /
+  `README.md` / `ROADMAP.md` doc polish from the same review
+  remains uncommitted and will land in the H8 governance pass so
+  all v0.3-era claims move together.
+
 ### Phase G — v0.2 structural primitives (2026-04-16)
 
 - **Style resolution** in `@prelight/react`: `resolveStyles()` plus a
@@ -72,7 +128,7 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
   magnitude under any CSS-in-JS runtime it displaces. ADR 017
   records the "primitives live in core" policy; ADR 018 records
   the zero-dep colour decision.
-- **Total v0.2 test count**: 254 tests green across all five
+- **Total v0.2 test count**: 269 tests green across all five
   packages (core 156, react 56, vitest 11, jest 5, cli 41) plus the
   928-case ground-truth corpus.
 

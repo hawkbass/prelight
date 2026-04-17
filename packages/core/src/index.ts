@@ -73,10 +73,13 @@ export type {
 export type {
   FitsFlexResult,
   FitsFlexSpec,
+  FlexAlign,
   FlexContainer,
   FlexDirection,
   FlexItem,
   FlexItemLayout,
   FlexJustify,
   FlexLayout,
+  FlexLineLayout,
+  FlexWrap,
 } from './layout/flex.js';

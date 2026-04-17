@@ -1,7 +1,7 @@
 {
   "@prelight/core": {
-    "minified": 18432,
-    "gzipped": 7168
+    "minified": 20480,
+    "gzipped": 8192
   },
   "@prelight/react": {
     "minified": 5632,
