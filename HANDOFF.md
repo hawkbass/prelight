@@ -11,6 +11,171 @@ the work.
 
 ---
 
+## 2026-04-17 — v0.3 H6b landed; stop before H7 (runtime style probes) — pre-registered cliff phase
+
+**Session transcript:** [v0.3 H6b emoji measurementFonts contract](940bdce9-d3a9-4949-b8d9-5b8793c69f0c)
+
+### State (fully committed)
+
+H6b shipped as `13280d2` on top of H6a's `4e90d5b`:
+
+- **H6b** `13280d2` v0.3 H6b: VerifySpec.measurementFonts.emoji
+  contract surface. Retires the `PRELIGHT-NEXT(v0.3 H6b)`
+  marker in `packages/core/src/types.ts`. Adds
+  `MeasurementFontFamilies.emoji?: string[]`; new
+  `correctEmojiLayout` pass in `packages/core/src/shape/emoji.ts`
+  chained after `correctCJKLayout` in `verify()`. New public
+  exports: `containsEmoji`,
+  `correctEmojiLayout`,
+  `setEmojiMeasurementFamilies`,
+  `getEmojiMeasurementFamilies`. Precedence identical to H6a
+  (per-call > global > no-op); empty-array opts out. **Unlike
+  H6a, NO monotonicity floor** — emoji disagreements observed
+  split bidirectionally (33 under-wrap, 8 over-wrap on the
+  H6a baseline), so clamping either direction would leave
+  half the population uncorrected.
+
+Working tree again holds only the pre-existing v0.2.0-rc doc
+fixes (`README.md`, `ROADMAP.md`) plus untracked research /
+`.cursor` scratch — identical to the post-H6a tree. Do NOT
+fold those doc fixes into any v0.3 commit; they still belong
+to v0.3.0-rc tagging at H8.
+
+### Gates (last verified this session)
+
+- `bun run typecheck` — 5/5 packages, 0 errors
+- `bun run test` — **402 passing** (core 270, react 80,
+  vitest 11, jest 5, cli 41). +12 vs H6a (all from the new
+  M13–M24 emoji cases in `measurement-fonts.test.ts`).
+- `bun run build` — 5/5 packages, 0 errors
+- `bun scripts/measure-bundle.ts --strict` — within budget:
+  - `@prelight/core` 23.80 KB min / 8.97 KB gz (24.00 / 9.00)
+    — **~0.20 KB min / ~0.03 KB gz headroom remaining**. Next
+    core phase growing by ≥0.2 KB min will trigger a budget
+    bump (same pattern as H1 / H3 / H6a).
+  - `@prelight/react` 6.14 KB min / 2.64 KB gz (6.50 / 2.88)
+  - `@prelight/vitest` 2.10 KB min / 806 B gz (2.50 / 1.00)
+  - `@prelight/jest` 2.24 KB min / 905 B gz (2.50 / 1.00)
+  - `@prelight/cli` 7.23 KB min / 2.69 KB gz (8.00 / 3.00)
+
+### Ground-truth status (unchanged by H6b alone — by design)
+
+H6b is a contract-surface landing: consumers now have a way
+to register an emoji-capable face via
+`VerifySpec.measurementFonts.emoji`. The ground-truth harness
+(`ground-truth/harness.ts`) does not yet register any emoji
+face with `@napi-rs/canvas`, so the probe returns `null` and
+the correction is a no-op in the harness run. Chromium emoji
+agreement stays at 367/408 (90.0%) exactly as the pre-H6b
+baseline captured in `ground-truth/emoji-baseline-2026-04-17.json`.
+
+**Moving the emoji number is follow-up work** (not H7): ship
+an emoji font subset in `ground-truth/fonts/`, wire it through
+`bootstrap.html` via `@font-face`, and call
+`setEmojiMeasurementFamilies(['...'])` in the harness startup.
+This is a product decision (which face, color vs monochrome,
+how many KB of glyph data) rather than a code change. Tracked
+mentally as "emoji harness font" — not yet a formal
+`PRELIGHT-NEXT` marker. If taking this on, keep it separate
+from H7 and H8 so the two concerns don't entangle.
+
+### Why I stopped here (pre-registered cliff, matches H5/H6a pattern)
+
+H6b was scoped during pre-implementation discussion as "emoji
+contract surface + correction pass, no harness font yet". That
+scope is now complete: the marker is retired, the contract is
+wired, precedence is codified, 12 tests prove the wiring, the
+bundle stays within H6a's ceiling, and the over-wrap bug is
+explicitly deferred with reasoning (FINDINGS.md §H6b,
+CHANGELOG Phase H6b).
+
+H7 (runtime style probes for emotion + styled-components) is
+the **high-risk cliff phase** pre-registered in the original
+v0.3 plan review. It needs a runtime (not AST) probe path —
+a different algorithmic shape from any phase shipped so far,
+and specifically flagged as needing fresh context + user input
+on scope before I touch code. Landing H6b at the tail end of a
+long session and then pivoting into H7 on the same autopilot
+is exactly the cliff the user pre-registered against.
+
+### What a fresh agent should do first
+
+1. Read this block + the "evidence invariant" in `AGENTS.md`.
+2. Read the latest `CHANGELOG.md` (Phase H6b, top entry) and
+   `FINDINGS.md` (2026-04-17 H6b, top entry) — both describe
+   the contract surface, the under-wrap vs over-wrap split,
+   and the ground-truth-unchanged-by-design reasoning.
+3. Read `packages/core/src/shape/emoji.ts` + the H6a sibling
+   `packages/core/src/shape/cjk.ts` side-by-side. The two
+   files deliberately mirror each other except for the
+   monotonicity-floor divergence, and that structural pairing
+   is the template any future H6-class correction (e.g.
+   devanagari, thai) should follow.
+4. Read `packages/react/src/style-resolver.ts` and
+   `packages/react/src/extract.ts` for the
+   `PRELIGHT-NEXT(v0.3 H7)` markers — that's the H7 scope.
+5. **Before touching H7 code, ask the user**. The original
+   v0.3 review flagged H7 as "the phase to pause on before
+   design-review". Minimum questions to line up for the user:
+    - Does H7 ship a **runtime** probe (mount components into
+      a hidden DOM, read computed styles off real browser
+      nodes) or a **semi-runtime** probe (introspect
+      emotion/styled-components' style cache without a DOM
+      mount)?
+    - Ground-truth implications: runtime probes may need a
+      Playwright-side corpus, which is a larger infrastructure
+      lift than the H2–H6b pure-core work. Is H7 allowed to
+      extend the ground-truth harness surface, or does it
+      stay unit-test + example-integration level like H1–H6b?
+    - Does the product want H7 to cover **all supported
+      style patterns** (static styles, dynamic props, theme
+      providers, nested selectors) or a MVP slice?
+    - Bundle envelope for `@prelight/react` is currently
+      6.14 KB min. H7 will push it; the 6.50 KB / 2.88 KB
+      ceiling is the next constraint — not a hard blocker,
+      but worth naming before scope grows.
+
+### Remaining v0.3 backlog
+
+- **H7**: Runtime style probes for emotion + styled-components
+  — the `PRELIGHT-NEXT(v0.3 H7)` markers in
+  `packages/react/src/style-resolver.ts` and
+  `packages/react/src/extract.ts`. Pre-registered as the
+  high-risk cliff phase. Expect to pause before H7 and get
+  user input on scope before any code moves.
+- **H8**: v0.3.0-rc tagging. Fold the pre-existing v0.2.0-rc
+  doc fixes (`README.md`, `ROADMAP.md`) into this release
+  alongside an H8 docs pass that updates v0.3's shipped
+  feature set (H1 flex-wrap + align-items-{start,end,center,stretch,baseline},
+  H2 block-flow completeness, H3 aspect object-position +
+  percentage edge insets, H4 slot markers, H5 baseline align,
+  H6a CJK `measurementFonts`, H6b emoji `measurementFonts`,
+  H7 runtime style probes). Same publish-decision wait as
+  v0.2.0-rc — user says go before anything pushes.
+
+### Nice-to-haves not yet blocking any phase
+
+- **Emoji harness font**: the one change that would move the
+  chromium emoji number above 90%. Product decision, not a
+  code change (see "Ground-truth status" above). Can be done
+  in parallel with H7 by a second agent if desired.
+- **Over-wrap bug**: the 8 emoji cases where isolated
+  `verify()` returns correctly but the harness dump reports
+  extra lines. Suspect: harness case-ordering or Pretext's
+  internal `segmentMetricCaches` retaining state across cases.
+  Needs a minimal reproduction first. Safe to defer until
+  after v0.3.0-rc.
+
+### Versioning context (unchanged from prior blocks)
+
+The user chose to invent intermediate point releases (v0.4,
+v0.5, …) between v0.3 and v1.0, slicing the v1.0 "full
+Presize engine" scope. Exact slicing of v0.4/v0.5 content is
+**still pending user input** and should be asked for only
+after v0.3 lands.
+
+---
+
 ## 2026-04-17 — v0.3 H6a landed; stop before H6b (emoji) — new capability, not a contract move
 
 **Session transcript:** [v0.3 H6a measurementFonts.cjk contract](0ab7a65b-69bb-48c9-b9af-f8bf5624a030)
