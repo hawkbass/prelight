@@ -1,5 +1,5 @@
 /**
- * G2 Box-model corpus: 30 cases.
+ * Box-model corpus: 38 cases.
  *
  * Each case encodes a CSS box-model scenario with the expected
  * computed values derived from the CSS 2.1 box model spec (§8).
@@ -7,10 +7,13 @@
  * match against the spec is a match against Chromium / WebKit /
  * Firefox — all three implement the same spec.
  *
- *   1-10: EdgeInsets constructors + shorthand parsing
- *  11-20: box() arithmetic (padding, border, margin combinations)
- *  21-25: border-box inverse + intrinsic sizing helpers
- *  26-30: integration with Measurement shape + edge cases
+ *   1-10: EdgeInsets constructors + shorthand parsing (G2)
+ *  11-20: box() arithmetic (padding, border, margin combinations) (G2)
+ *  21-25: border-box inverse + intrinsic sizing helpers (G2)
+ *  26-30: integration with Measurement shape + edge cases (G2)
+ *  31-38: v0.3 H3.2 — percentage insets (pct helper,
+ *         resolveInsets, parseEdgeInsets with %, vertical
+ *         quirk, shorthand mix, error paths)
  */
 
 import { describe, expect, test } from 'vitest';
@@ -24,6 +27,9 @@ import {
   edgeInsetsSymmetric,
   horizontalInset,
   parseEdgeInsets,
+  parseResolvableInsets,
+  pct,
+  resolveInsets,
   verticalInset,
   zeroInsets,
   type EdgeInsets,
@@ -72,8 +78,13 @@ describe('G2.1 EdgeInsets constructors', () => {
   test('C09 parseEdgeInsets unit-less numbers', () => {
     expect(parseEdgeInsets('5 10 5 10')).toEqual({ top: 5, right: 10, bottom: 5, left: 10 });
   });
-  test('C10 parseEdgeInsets rejects unsupported', () => {
-    expect(() => parseEdgeInsets('10% 5px')).toThrow(/unsupported token/);
+  test('C10 parseEdgeInsets rejects unsupported / unresolvable', () => {
+    // In v0.3 (H3.2) % is supported *when* a containing-block
+    // width is supplied; without one, the error surfaces that
+    // specific condition rather than the old blanket "unsupported".
+    expect(() => parseEdgeInsets('10% 5px')).toThrow(/contains %-tokens/);
+    // calc() and other forms remain unsupported at the token level.
+    expect(() => parseEdgeInsets('calc(10px + 5%)')).toThrow(/unsupported token/);
     expect(() => parseEdgeInsets('')).toThrow(/expected 1-4 tokens/);
   });
 });
@@ -257,5 +268,61 @@ describe('G2.4 integration + edge cases', () => {
       verticalInset(b.padding);
     expect(recoveredWidth).toBe(100);
     expect(recoveredHeight).toBe(20);
+  });
+});
+
+describe('v0.3 H3.2 percentage insets', () => {
+  test('C31 pct() constructs a tagged percent inset', () => {
+    const p = pct(25);
+    expect(p).toEqual({ percent: 25 });
+  });
+
+  test('C32 resolveInsets scales percentages against containing-block width', () => {
+    const spec = { top: pct(10), right: pct(20), bottom: pct(10), left: pct(20) };
+    const resolved = resolveInsets(spec, 400);
+    // 10% of 400 = 40; 20% of 400 = 80.
+    expect(resolved).toEqual({ top: 40, right: 80, bottom: 40, left: 80 });
+  });
+
+  test('C33 resolveInsets: vertical edges use width, not height (CSS quirk)', () => {
+    // Even the top/bottom percentages resolve against the
+    // *width*. This is the critical CSS semantic we must
+    // preserve; if a caller expects height-based % they'll
+    // mis-predict the real browser layout.
+    const spec = { top: pct(50), bottom: pct(50), left: 0, right: 0 };
+    const resolved = resolveInsets(spec, 200);
+    expect(resolved.top).toBe(100);
+    expect(resolved.bottom).toBe(100);
+  });
+
+  test('C34 resolveInsets mixes px and % per edge', () => {
+    const spec = { top: 10, right: pct(25), bottom: 5, left: pct(50) };
+    const resolved = resolveInsets(spec, 200);
+    expect(resolved).toEqual({ top: 10, right: 50, bottom: 5, left: 100 });
+  });
+
+  test('C35 parseEdgeInsets resolves "10%" shorthand when width supplied', () => {
+    const r = parseEdgeInsets('10%', 300);
+    expect(r).toEqual({ top: 30, right: 30, bottom: 30, left: 30 });
+  });
+
+  test('C36 parseEdgeInsets mixes "10% 20px" with width', () => {
+    const r = parseEdgeInsets('10% 20px', 500);
+    // 1-2 form: vertical 10% of 500 = 50, horizontal 20.
+    expect(r).toEqual({ top: 50, right: 20, bottom: 50, left: 20 });
+  });
+
+  test('C37 parseResolvableInsets defers resolution', () => {
+    const spec = parseResolvableInsets('10% 5px 15% 20px');
+    // 4-value form: top 10%, right 5, bottom 15%, left 20.
+    expect(spec).toEqual({ top: pct(10), right: 5, bottom: pct(15), left: 20 });
+    const resolved = resolveInsets(spec, 100);
+    expect(resolved).toEqual({ top: 10, right: 5, bottom: 15, left: 20 });
+  });
+
+  test('C38 parseEdgeInsets throws on % without containing-block width', () => {
+    expect(() => parseEdgeInsets('10%')).toThrow(/contains %-tokens/);
+    // But px-only still works with no width, preserving v0.2 API.
+    expect(parseEdgeInsets('10px 20px')).toEqual({ top: 10, right: 20, bottom: 10, left: 20 });
   });
 });

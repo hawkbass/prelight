@@ -1,5 +1,5 @@
 /**
- * Image aspect-ratio layout for v0.2 (G5).
+ * Image aspect-ratio layout.
  *
  * Implements the CSS `object-fit` values:
  *
@@ -9,20 +9,44 @@
  *   scale-down — min(contain, none); never upscale
  *   none       — intrinsic size; overflows if larger than slot
  *
- * The output describes the rendered image rect (width, height) and
- * per-axis letterboxing / clipping. The `fitsAspect()` predicate
- * then decides whether the outcome is acceptable for a given
- * design intent (e.g. "no letterbox allowed on a hero").
+ * Plus CSS `object-position` in v0.3 (H3.1): arbitrary placement
+ * of the rendered rect inside the slot. The output exposes both
+ * per-side values (`letterboxLeft/Right/Top/Bottom`,
+ * `clippedLeft/Right/Top/Bottom`) which respect `objectPosition`,
+ * and legacy `letterboxX/Y` / `clippedX/Y` fields which stay
+ * source-compatible with v0.2 code paths — those fields now
+ * report `max(left, right)` / `max(top, bottom)` so the
+ * `fitsAspect()` threshold checks still catch the worst side
+ * under any asymmetric placement. Under the centered default
+ * (`{ x: 0.5, y: 0.5 }`) both interpretations agree, so v0.2
+ * callers see no behaviour change.
  *
  * PRELIGHT-INVARIANT: pure. Deterministic arithmetic over
- * intrinsic + slot dimensions only.
+ * intrinsic + slot + position only.
  *
- * PRELIGHT-NEXT(v0.3): `object-position` offsets. v0.2 always
- * centers the rendered rect inside the slot, which matches the
- * CSS default (`50% 50%`) but not arbitrary positioning.
+ * PRELIGHT-NEXT(v0.4+): position values outside [0, 1]. CSS
+ * permits positions like `-10%` (image hangs off slot's left
+ * edge) or `110%` (hangs off right). v0.3 clamps to [0, 1];
+ * full overhang needs a "slot-external" offset field.
  */
 
 export type ObjectFit = 'contain' | 'cover' | 'fill' | 'scale-down' | 'none';
+
+/**
+ * CSS `object-position` as a unit interval on each axis. x = 0
+ * aligns the image's left edge with the slot's left edge
+ * (equivalent to CSS `object-position: 0% 50%`); x = 1 aligns
+ * right edges (`100% 50%`); x = 0.5 is the CSS default
+ * (`50% 50%`, i.e. centered). Values are clamped to [0, 1] in
+ * v0.3 — see the file-level PRELIGHT-NEXT for overhang support.
+ */
+export interface ObjectPosition {
+  x: number;
+  y: number;
+}
+
+/** The CSS default `object-position: 50% 50%`. */
+export const OBJECT_POSITION_CENTER: ObjectPosition = Object.freeze({ x: 0.5, y: 0.5 });
 
 export interface IntrinsicImage {
   /** Natural pixel width. */
@@ -42,37 +66,78 @@ export interface AspectLayout {
   /** Rendered image rect height in the slot. */
   renderHeight: number;
   /**
-   * Horizontal letterbox on each side (symmetric for CSS default
-   * `object-position: 50% 50%`). Zero when the rendered rect is
-   * ≥ slot width.
+   * Worst-side letterbox on the horizontal axis. Equals
+   * `max(letterboxLeft, letterboxRight)`. Under the centered
+   * default (`object-position.x === 0.5`) this equals half the
+   * total letterbox, matching v0.2 behaviour. Under asymmetric
+   * positioning this reports the larger of the two sides, which
+   * is the value `fitsAspect()` compares against `maxLetterboxPx`.
    */
   letterboxX: number;
-  /** Vertical letterbox on each side. */
+  /** Worst-side vertical letterbox. Symmetric to `letterboxX`. */
   letterboxY: number;
-  /** Horizontal portion of the image clipped out (each side). */
+  /** Worst-side horizontal clipping. `max(clippedLeft, clippedRight)`. */
   clippedX: number;
-  /** Vertical portion of the image clipped out (each side). */
+  /** Worst-side vertical clipping. */
   clippedY: number;
+  /** Letterbox on the slot's left edge (renderWidth < slot.width). */
+  letterboxLeft: number;
+  /** Letterbox on the slot's right edge. */
+  letterboxRight: number;
+  /** Letterbox on the slot's top edge. */
+  letterboxTop: number;
+  /** Letterbox on the slot's bottom edge. */
+  letterboxBottom: number;
+  /** Image clipped on the slot's left edge (renderWidth > slot.width). */
+  clippedLeft: number;
+  /** Image clipped on the slot's right edge. */
+  clippedRight: number;
+  /** Image clipped on the slot's top edge. */
+  clippedTop: number;
+  /** Image clipped on the slot's bottom edge. */
+  clippedBottom: number;
   /** Effective scale applied to the intrinsic image (1 = no scaling). */
   scaleX: number;
   scaleY: number;
 }
 
+function clamp01(n: number): number {
+  if (n < 0) return 0;
+  if (n > 1) return 1;
+  return n;
+}
+
 /**
  * Compute the rendered rect + letterbox + clipping given an
- * intrinsic image, a slot, and an object-fit mode.
+ * intrinsic image, a slot, an object-fit mode, and an optional
+ * object-position. Position defaults to centered (`{ x: 0.5, y: 0.5 }`)
+ * which matches CSS's default `object-position: 50% 50%`.
  */
 export function aspectFit(
   intrinsic: IntrinsicImage,
   slot: Slot,
   fit: ObjectFit = 'contain',
+  position: ObjectPosition = OBJECT_POSITION_CENTER,
 ): AspectLayout {
+  const px = clamp01(position.x);
+  const py = clamp01(position.y);
+
   if (intrinsic.width <= 0 || intrinsic.height <= 0) {
+    // Zero-sized intrinsic image: rendered rect is (0, 0); whole
+    // slot is letterbox, distributed by position.
     return {
       renderWidth: 0,
       renderHeight: 0,
-      letterboxX: slot.width / 2,
-      letterboxY: slot.height / 2,
+      letterboxLeft: slot.width * px,
+      letterboxRight: slot.width * (1 - px),
+      letterboxTop: slot.height * py,
+      letterboxBottom: slot.height * (1 - py),
+      clippedLeft: 0,
+      clippedRight: 0,
+      clippedTop: 0,
+      clippedBottom: 0,
+      letterboxX: Math.max(slot.width * px, slot.width * (1 - px)),
+      letterboxY: Math.max(slot.height * py, slot.height * (1 - py)),
       clippedX: 0,
       clippedY: 0,
       scaleX: 0,
@@ -123,7 +188,9 @@ export function aspectFit(
     }
 
     case 'scale-down': {
-      // contain, but never upscaled.
+      // contain, but never upscaled. Position has no effect on
+      // size here; we reuse the centered contain result purely for
+      // its dimensions.
       const contained = aspectFit(intrinsic, slot, 'contain');
       if (contained.renderWidth >= intrinsic.width && contained.renderHeight >= intrinsic.height) {
         renderWidth = intrinsic.width;
@@ -143,20 +210,58 @@ export function aspectFit(
     }
   }
 
-  const overflowX = renderWidth - slot.width;
-  const overflowY = renderHeight - slot.height;
-  const letterboxX = overflowX < 0 ? -overflowX / 2 : 0;
-  const letterboxY = overflowY < 0 ? -overflowY / 2 : 0;
-  const clippedX = overflowX > 0 ? overflowX / 2 : 0;
-  const clippedY = overflowY > 0 ? overflowY / 2 : 0;
+  // Per-axis slack: negative means rendered rect is smaller than
+  // the slot (letterbox), positive means it's larger (clip).
+  const slackX = renderWidth - slot.width;
+  const slackY = renderHeight - slot.height;
+
+  let letterboxLeft = 0;
+  let letterboxRight = 0;
+  let clippedLeft = 0;
+  let clippedRight = 0;
+  if (slackX < 0) {
+    // Letterbox distributed by position. px=0 → all on right;
+    // px=1 → all on left; px=0.5 → split evenly.
+    const total = -slackX;
+    letterboxLeft = total * px;
+    letterboxRight = total * (1 - px);
+  } else if (slackX > 0) {
+    // Clip distributed by position: image overflows, position
+    // chooses which side gets trimmed. px=0 means image's left
+    // edge anchored to slot's left, so all overflow is clipped
+    // on the right.
+    clippedLeft = slackX * px;
+    clippedRight = slackX * (1 - px);
+  }
+
+  let letterboxTop = 0;
+  let letterboxBottom = 0;
+  let clippedTop = 0;
+  let clippedBottom = 0;
+  if (slackY < 0) {
+    const total = -slackY;
+    letterboxTop = total * py;
+    letterboxBottom = total * (1 - py);
+  } else if (slackY > 0) {
+    clippedTop = slackY * py;
+    clippedBottom = slackY * (1 - py);
+  }
 
   return {
     renderWidth,
     renderHeight,
-    letterboxX,
-    letterboxY,
-    clippedX,
-    clippedY,
+    letterboxLeft,
+    letterboxRight,
+    letterboxTop,
+    letterboxBottom,
+    clippedLeft,
+    clippedRight,
+    clippedTop,
+    clippedBottom,
+    letterboxX: Math.max(letterboxLeft, letterboxRight),
+    letterboxY: Math.max(letterboxTop, letterboxBottom),
+    clippedX: Math.max(clippedLeft, clippedRight),
+    clippedY: Math.max(clippedTop, clippedBottom),
     scaleX: renderWidth / intrinsic.width,
     scaleY: renderHeight / intrinsic.height,
   };
@@ -171,13 +276,22 @@ export interface FitsAspectSpec {
   slot: Slot;
   fit?: ObjectFit;
   /**
+   * Object-position inside the slot. Defaults to centered
+   * (`{ x: 0.5, y: 0.5 }`, matching CSS's `50% 50%`). Affects
+   * which side is letterboxed or clipped under non-square
+   * aspect mismatches — the predicate flags the worst side.
+   */
+  position?: ObjectPosition;
+  /**
    * Maximum allowed letterbox in px on either axis. Defaults to 0:
    * any letterboxing fails. Useful for heroes where you want the
    * image to fully cover; the caller opts into some letterbox
-   * with a positive threshold.
+   * with a positive threshold. Compared against the WORST side
+   * (`max(letterboxLeft, letterboxRight)`), so an asymmetric
+   * `object-position` pile-up on one side still fails.
    */
   maxLetterboxPx?: number;
-  /** Maximum allowed clipping in px on either axis. Defaults to 0. */
+  /** Maximum allowed clipping in px on either axis (worst side). Defaults to 0. */
   maxClipPx?: number;
   /**
    * Minimum effective scale. e.g. `0.5` forbids scaling below 50%
@@ -198,7 +312,12 @@ export interface FitsAspectResult {
 }
 
 export function fitsAspect(spec: FitsAspectSpec): FitsAspectResult {
-  const layout = aspectFit(spec.intrinsic, spec.slot, spec.fit ?? 'contain');
+  const layout = aspectFit(
+    spec.intrinsic,
+    spec.slot,
+    spec.fit ?? 'contain',
+    spec.position ?? OBJECT_POSITION_CENTER,
+  );
   const reasons: string[] = [];
   const maxLetterbox = spec.maxLetterboxPx ?? 0;
   const maxClip = spec.maxClipPx ?? 0;

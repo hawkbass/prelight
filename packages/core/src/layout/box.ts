@@ -1,5 +1,5 @@
 /**
- * Box model primitives for v0.2 (G2).
+ * Box model primitives.
  *
  * This file introduces `Box` and `EdgeInsets` — pure data types
  * describing a CSS box with content + padding + border + margin.
@@ -11,14 +11,22 @@
  * value against. For `border-box` consumers we expose a
  * `boxFromBorderBox()` builder that reverses the arithmetic.
  *
+ * v0.3 (H3.2) adds percentage-based insets via `ResolvableInset`,
+ * `pct()`, and `resolveInsets()`. Percentages follow the CSS rule
+ * that *all* percentage padding/margin — top, right, bottom, left —
+ * resolves against the **containing block's width**, not against
+ * the box's own height on the vertical axis. This is a known CSS
+ * quirk but preserving it is the whole point: Prelight is a layout
+ * verifier, not a new layout spec.
+ *
  * PRELIGHT-INVARIANT: every function in this file is pure. No I/O,
  * no DOM, no canvas calls. Given the same inputs it returns the
  * same output. Arithmetic rounding follows IEEE-754 double — no
  * deliberate truncation.
  *
- * PRELIGHT-NEXT(v0.3): percentage-based insets resolved against a
- * caller-supplied containing-block width. Today we accept px-only
- * numeric insets.
+ * PRELIGHT-NEXT(v0.4): `calc()` expressions mixing px + %. v0.3
+ * accepts `"10px"` or `"10%"` but not `"calc(10% + 4px)"`; support
+ * needs a tiny AST and containing-block-aware resolution.
  */
 
 import type { Measurement } from '../types.js';
@@ -33,6 +41,70 @@ export interface EdgeInsets {
   right: number;
   bottom: number;
   left: number;
+}
+
+/**
+ * Unresolved percent inset (H3.2). Produced by `pct(n)` or by
+ * `parseEdgeInsets()` before resolution; consumed by
+ * `resolveInsets()`. Kept as a discriminated tag rather than a
+ * bare number so TypeScript prevents accidentally mixing px and %
+ * values in the same position.
+ */
+export interface PercentInset {
+  percent: number;
+}
+
+/** A single inset value: either px (number) or a percent tag. */
+export type ResolvableInset = number | PercentInset;
+
+/** Per-edge resolvable spec — the input to `resolveInsets()`. */
+export interface ResolvableEdgeInsets {
+  top?: ResolvableInset;
+  right?: ResolvableInset;
+  bottom?: ResolvableInset;
+  left?: ResolvableInset;
+}
+
+/**
+ * Tag a number as a percent inset. `pct(10)` means "10% of the
+ * containing block's width" (CSS semantics — the same rule
+ * applies to vertical edges).
+ */
+export function pct(percent: number): PercentInset {
+  return { percent };
+}
+
+function isPercent(value: ResolvableInset): value is PercentInset {
+  return typeof value === 'object' && value !== null && 'percent' in value;
+}
+
+function resolveOne(value: ResolvableInset | undefined, containingBlockWidth: number): number {
+  if (value === undefined) return 0;
+  if (typeof value === 'number') return value;
+  return (value.percent / 100) * containingBlockWidth;
+}
+
+/**
+ * Resolve a `ResolvableEdgeInsets` against a containing-block
+ * width, returning concrete px-only `EdgeInsets`. Missing edges
+ * default to 0. Per CSS, all four edges (including top/bottom)
+ * resolve percentages against **width**, not height.
+ */
+export function resolveInsets(
+  spec: ResolvableEdgeInsets,
+  containingBlockWidth: number,
+): EdgeInsets {
+  if (!Number.isFinite(containingBlockWidth) || containingBlockWidth < 0) {
+    throw new Error(
+      `resolveInsets: containingBlockWidth must be a non-negative finite number, got ${containingBlockWidth}`,
+    );
+  }
+  return {
+    top: resolveOne(spec.top, containingBlockWidth),
+    right: resolveOne(spec.right, containingBlockWidth),
+    bottom: resolveOne(spec.bottom, containingBlockWidth),
+    left: resolveOne(spec.left, containingBlockWidth),
+  };
 }
 
 export interface BoxSpec {
@@ -107,22 +179,73 @@ export function only(edges: Partial<EdgeInsets>): EdgeInsets {
  *   "10px 20px 5px"     → top 10, horizontal 20, bottom 5
  *   "10px 20px 5px 8px" → top 10, right 20, bottom 5, left 8
  *
- * Unsupported forms (calc, %, mixed units) throw — callers should
- * pre-resolve them.
+ * v0.3 (H3.2) also accepts `%` tokens provided a
+ * `containingBlockWidth` is supplied; percentages are resolved
+ * against that width on all four edges (CSS quirk).
+ *
+ *   parseEdgeInsets('10%', 200)           → all edges 20
+ *   parseEdgeInsets('10% 20px', 200)      → vert 20, horiz 20
+ *
+ * If a `%` token appears without a `containingBlockWidth`, throws
+ * with a clear message — callers should either supply the width
+ * or parse into a `ResolvableEdgeInsets` via
+ * `parseResolvableInsets()` and resolve later.
+ *
+ * `calc()` / mixed-unit forms still throw — see the file-level
+ * PRELIGHT-NEXT.
  */
-export function parseEdgeInsets(shorthand: string | number): EdgeInsets {
+export function parseEdgeInsets(
+  shorthand: string | number,
+  containingBlockWidth?: number,
+): EdgeInsets {
   if (typeof shorthand === 'number') return all(shorthand);
+  const spec = parseResolvableInsets(shorthand);
+  if (containingBlockWidth === undefined) {
+    // Fast-path when no % tokens appeared and the caller didn't
+    // supply a width: every edge is a number, so we can return
+    // directly without forcing the caller to pass a width that
+    // will be ignored.
+    if (
+      (spec.top === undefined || typeof spec.top === 'number') &&
+      (spec.right === undefined || typeof spec.right === 'number') &&
+      (spec.bottom === undefined || typeof spec.bottom === 'number') &&
+      (spec.left === undefined || typeof spec.left === 'number')
+    ) {
+      return {
+        top: (spec.top as number | undefined) ?? 0,
+        right: (spec.right as number | undefined) ?? 0,
+        bottom: (spec.bottom as number | undefined) ?? 0,
+        left: (spec.left as number | undefined) ?? 0,
+      };
+    }
+    throw new Error(
+      `parseEdgeInsets: "${shorthand}" contains %-tokens; pass a containingBlockWidth (or use parseResolvableInsets + resolveInsets).`,
+    );
+  }
+  return resolveInsets(spec, containingBlockWidth);
+}
+
+/**
+ * Parse a CSS shorthand into an unresolved `ResolvableEdgeInsets`.
+ * Accepts the same 1- to 4-value forms as `parseEdgeInsets`, plus
+ * `%` tokens. The caller resolves with `resolveInsets(spec,
+ * containingBlockWidth)` once the width is known — useful when
+ * building a style object before the containing block exists.
+ */
+export function parseResolvableInsets(shorthand: string): ResolvableEdgeInsets {
   const tokens = shorthand.trim().split(/\s+/).filter(Boolean);
   if (tokens.length === 0 || tokens.length > 4) {
-    throw new Error(`parseEdgeInsets: expected 1-4 tokens, got ${tokens.length} in "${shorthand}"`);
+    throw new Error(
+      `parseResolvableInsets: expected 1-4 tokens, got ${tokens.length} in "${shorthand}"`,
+    );
   }
-  const px = tokens.map(parsePxToken);
-  const [a, b, c, d] = px;
+  const values = tokens.map(parseInsetToken);
+  const [a, b, c, d] = values;
   switch (tokens.length) {
     case 1:
-      return all(a!);
+      return { top: a!, right: a!, bottom: a!, left: a! };
     case 2:
-      return symmetric(a!, b!);
+      return { top: a!, right: b!, bottom: a!, left: b! };
     case 3:
       return { top: a!, right: b!, bottom: c!, left: b! };
     case 4:
@@ -132,12 +255,14 @@ export function parseEdgeInsets(shorthand: string | number): EdgeInsets {
   }
 }
 
-function parsePxToken(token: string): number {
-  const match = /^(-?\d*\.?\d+)\s*(px)?$/i.exec(token);
-  if (!match) {
-    throw new Error(`parseEdgeInsets: unsupported token "${token}" (only px supported in v0.2)`);
-  }
-  return Number.parseFloat(match[1] ?? '');
+function parseInsetToken(token: string): ResolvableInset {
+  const pxMatch = /^(-?\d*\.?\d+)\s*(px)?$/i.exec(token);
+  if (pxMatch) return Number.parseFloat(pxMatch[1] ?? '');
+  const pctMatch = /^(-?\d*\.?\d+)\s*%$/.exec(token);
+  if (pctMatch) return { percent: Number.parseFloat(pctMatch[1] ?? '') };
+  throw new Error(
+    `parseEdgeInsets: unsupported token "${token}" (only px and % supported; calc/mixed units not yet).`,
+  );
 }
 
 /** Zero-inset singleton. Safe to alias — never mutate. */

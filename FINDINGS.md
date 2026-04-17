@@ -7,6 +7,137 @@ rewriting history.
 
 ---
 
+## 2026-04-17 — v0.3 H3 aspect `object-position` + percentage edge insets: evidence status
+
+Environment: Windows 10.0.26200, Bun 1.3.11, @prelight/core internal
+build (committed after H2 as 3256742), no browser run.
+
+### What was implemented
+
+Two v0.3 markers in `packages/core/src/layout/` were retired:
+
+1. **`object-position` in `aspect.ts`** (CSS Images Module). The
+   `aspectFit()` signature now accepts an optional
+   `ObjectPosition = { x: number; y: number }` parameter where
+   each component lies on the unit interval (0 = start-edge
+   aligned, 1 = end-edge aligned, 0.5 = centered = CSS default
+   `50% 50%`). Output `AspectLayout` gained eight per-side
+   fields (`letterboxLeft`/`Right`/`Top`/`Bottom`,
+   `clippedLeft`/`Right`/`Top`/`Bottom`) computed from the
+   rendered rect + position slack. The legacy `letterboxX`/`Y`
+   and `clippedX`/`Y` fields report `max(left, right)` /
+   `max(top, bottom)` so worst-side threshold checks still
+   catch asymmetric placements. Under the centered default
+   (`{ x: 0.5, y: 0.5 }`), both views are byte-identical to
+   v0.2 output — zero observable change for existing callers.
+   Positions outside [0, 1] clamp to [0, 1]; full CSS overhang
+   is deferred (see `aspect.ts` `PRELIGHT-NEXT(v0.4+)`).
+2. **Percentage edge insets in `box.ts`** (CSS 2.1 §8.4, §10).
+   New `PercentInset = { percent: number }` tag, `pct(n)`
+   helper, `ResolvableInset = number | PercentInset`, and
+   `ResolvableEdgeInsets` partial spec. `resolveInsets(spec,
+   containingBlockWidth)` resolves all four edges against the
+   caller-supplied containing-block width — preserving the CSS
+   quirk that vertical (top/bottom) padding and margin
+   percentages also resolve against **width**, not height.
+   `parseEdgeInsets(shorthand, containingBlockWidth?)` gained
+   a second optional argument so `%` tokens work in the
+   shorthand, with a clear `contains %-tokens` error when a
+   width is needed but missing. `parseResolvableInsets()`
+   defers resolution for programmatic callers who know the
+   shorthand before the width. Pure px-only shorthands still
+   work with a single argument — v0.2 API preserved.
+
+### Available evidence (unit-test level)
+
+- **Aspect**: 32 cases in `packages/core/test/aspect.test.ts`
+  (was 20, +12 for H3.1 as C21–C32). C21–C22 verify default
+  equals `OBJECT_POSITION_CENTER`; C23–C27 exercise
+  asymmetric letterbox/clip distribution across `contain` and
+  `cover`; C28 confirms v0.2 centered output is preserved;
+  C29 confirms `fitsAspect` catches worst-side pile-up
+  (a 100 px letterbox on one side fails a 10 px threshold
+  even when the "average" per-side is 50 px); C30 verifies
+  overhang clamp; C31 verifies zero-size image honours
+  position; C32 verifies `fill` (no slack) is position-invariant.
+- **Box**: 38 cases in `packages/core/test/box.test.ts`
+  (was 30, +8 for H3.2 as C31–C38). C31 shape; C32 basic
+  resolution; C33 pins the vertical-width CSS quirk (C33
+  would break silently if we ever switched vertical edges
+  to height-resolve); C34 mixed px/%; C35–C36
+  `parseEdgeInsets` with width; C37 defer-then-resolve;
+  C38 error paths. The existing C10 was updated to assert
+  the new `contains %-tokens` error message (% with no width)
+  while still asserting that `calc()` tokens remain
+  unsupported.
+- **Full gates** (bun, Vitest, Jest, bundle budget) all green
+  after H3: typecheck 5/5, build 5/5, test 341 passing
+  (core 228, react 56, vitest 11, jest 5, cli 41), bundle
+  `core` 21.36 KB min / 8.14 KB gz (budget 22.00 / 8.50
+  after this phase's bump; see below).
+
+### What is **not** in this release (the honest gap)
+
+- **No browser-confirmed ground-truth** for either `object-position`
+  or percentage insets. Same reason as H1 and H2: the existing
+  `ground-truth/` harness is a text-layout oracle —
+  string in, Playwright-measured line-wrap out. It has no
+  image-rect extractor (needed for H3.1: take a slot +
+  intrinsic + fit + position, render `<img>` in three
+  browsers, read `getBoundingClientRect()` for the rendered
+  pixel rect and subtract from the slot to obtain per-side
+  letterbox/clip) and no box-model extractor (needed for
+  H3.2: render a div with `padding: 10%` inside a
+  known-width containing block and read `getComputedStyle`).
+  Both harnesses are straightforward to build (Playwright
+  exposes both `boundingClientRect` and `getComputedStyle`
+  via `page.evaluate`), but they are new corpora with their
+  own schemas, tolerances, and stability surface. That work
+  will land with `v0.3 H6` (CJK/emoji measurementFonts —
+  which already needs a browser-measurement path) or as a
+  dedicated structural-harness phase.
+
+In the interim the evidence invariant binds H3 the same way it
+bound H1/H2: unit-test arithmetic is evidence for "the engine
+applies the CSS formula we intended" and is *not* evidence for
+"the formula matches what Chromium / WebKit / Firefox
+render." README.md and the site are **not** permitted to claim
+browser-confirmed `object-position` or percentage-inset
+behaviour until the FINDINGS entry is amended with a dated
+ground-truth run.
+
+### Bundle impact
+
+`@prelight/core` grew 19.71 → 21.36 KB minified / 7.58 → 8.14
+KB gzipped (+1.65 KB min / +0.56 KB gz). This crossed the
+self-imposed 1 KB single-phase tripwire. The growth splits
+roughly half-and-half between the two subphases: H3.1 expands
+`aspectFit` with a second arithmetic path (per-side slack
+distribution) and enlarges `AspectLayout` by eight fields; H3.2
+introduces the `ResolvableInset` type layer plus a second
+tokenizer branch for `%`. Both are algorithmic work on named
+v0.3 markers from `ROADMAP.md`, no accidental expansion.
+Budget bumped from 20.00 KB min / 8.00 KB gz to 22.00 KB min /
+8.50 KB gz, following the same bump-with-feature pattern as
+H1.
+
+### Evidence invariant reminder
+
+- Unit tests prove *implementation intent matches our reading
+  of the spec*.
+- Ground-truth runs prove *implementation matches Chromium /
+  WebKit / Firefox*.
+- Public documentation may reference only the second, dated
+  in FINDINGS.md. H3.1 and H3.2 ship into `@prelight/core`,
+  `CHANGELOG.md` notes them as released features, but
+  `README.md` and any blog-post copy must steer clear of
+  claims like "pixel-accurate against real browsers" for
+  `object-position` or percentage insets until the
+  structural ground-truth harness exists and produces a
+  run.
+
+---
+
 ## 2026-04-17 — v0.3 H2 block-flow completeness: evidence gap on browser confirmation
 
 Environment: Windows 10.0.26200, Bun 1.3.11, @prelight/core internal

@@ -6,6 +6,67 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Phase H3 — v0.3 aspect `object-position` + percentage edge insets (2026-04-17)
+
+- **CSS `object-position` support** in `@prelight/core/layout/aspect.ts`:
+  new `ObjectPosition` type (`{ x: number; y: number }`, each
+  value on the unit interval) plus `OBJECT_POSITION_CENTER` for
+  the CSS default `50% 50%`. `aspectFit()` gained a fourth
+  optional `position` argument, and `fitsAspect()` gained a
+  matching `position?: ObjectPosition` spec field. The returned
+  `AspectLayout` now exposes per-side placement fields —
+  `letterboxLeft`/`Right`/`Top`/`Bottom` and
+  `clippedLeft`/`Right`/`Top`/`Bottom` — computed from the rendered
+  rect + position. The legacy `letterboxX`/`Y`/`clippedX`/`Y`
+  fields are preserved and now report `max(left, right)` /
+  `max(top, bottom)` so worst-side threshold checks still catch
+  asymmetric placements correctly; under the centered default
+  the legacy and per-side views agree byte-for-byte, so v0.2
+  callers see no behaviour change. Position values are clamped
+  to [0, 1] in v0.3 (overhang is a v0.4+ follow-on, see
+  `aspect.ts` PRELIGHT-NEXT). (H3.1)
+- **CSS percentage edge insets** in `@prelight/core/layout/box.ts`:
+  new `PercentInset` / `ResolvableInset` / `ResolvableEdgeInsets`
+  types and `pct(n)` helper to tag an edge as a percent. New
+  `resolveInsets(spec, containingBlockWidth)` resolves all four
+  edges against a caller-supplied width, preserving CSS's quirk
+  that top/bottom padding+margin percentages resolve against
+  **width**, not height. `parseEdgeInsets()` gained a second
+  optional `containingBlockWidth` argument — `%` tokens are now
+  accepted when a width is supplied, and throw a clear
+  `contains %-tokens` error when not. Pure px-only shorthands
+  continue to work with no second argument, preserving v0.2 API.
+  New `parseResolvableInsets()` defers resolution for callers
+  who parse before knowing the containing block. `calc()` and
+  mixed units remain unsupported and are retagged as
+  `PRELIGHT-NEXT(v0.4)` in `box.ts`. (H3.2)
+- **Evidence**: 20 new unit tests split across the two
+  subphases. `aspect.test.ts` +12 cases (C21–C32): default
+  preservation, top-left / bottom-right / anchored-contain
+  cases, cover-clip distribution, `fitsAspect` worst-side
+  pile-up failure, overhang clamp, zero-size + position, and
+  fill-no-slack. `box.test.ts` +8 cases (C31–C38): `pct()`
+  shape, `resolveInsets` basic + vertical-quirk + mixed px/%,
+  `parseEdgeInsets` with width, `parseResolvableInsets` defer,
+  and error paths. Every expected value derives from the CSS
+  2.1 Images module + CSS 2.1 §8.4 (margin percentages).
+  **Browser-confirmed ground-truth is not in this release** —
+  same harness-scope reason as H1/H2 (text-layout oracle,
+  no image-rect or box-model extraction yet). See
+  `FINDINGS.md` §2026-04-17 H3 for the full evidence-status
+  note. (H3)
+- **Bundle impact**: `@prelight/core` grew 19.71 → 21.36 KB min /
+  7.58 → 8.14 KB gz (+1.65 KB min / +0.56 KB gz). This crosses
+  the 1 KB single-phase tripwire. The growth is all
+  algorithmic — per-side aspect arithmetic, percent-inset
+  parser extension, and the resolvable spec type layer — with
+  no accidental expansion. Budget bumped to 22.00 KB min /
+  8.50 KB gz to leave ~0.64 KB min / ~0.36 KB gz headroom.
+  Budget bumps follow the same rule as H1: deliberate,
+  documented, and tied to a named feature landing. (H3)
+- **Test count**: 321 → 341 (v0.2 + v0.3 H1–H3). `AGENTS.md`
+  updated in this commit.
+
 ### Phase H2 — v0.3 block-flow completeness (2026-04-17)
 
 - **Parent-child margin collapse** in `@prelight/core/layout/block.ts`:

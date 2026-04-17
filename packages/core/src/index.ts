@@ -47,11 +47,21 @@ export {
   horizontalInset,
   only as edgeInsetsOnly,
   parseEdgeInsets,
+  parseResolvableInsets,
+  pct,
+  resolveInsets,
   symmetric as edgeInsetsSymmetric,
   verticalInset,
   zeroInsets,
 } from './layout/box.js';
-export type { Box, BoxSpec, EdgeInsets } from './layout/box.js';
+export type {
+  Box,
+  BoxSpec,
+  EdgeInsets,
+  PercentInset,
+  ResolvableEdgeInsets,
+  ResolvableInset,
+} from './layout/box.js';
 export { computeFlexLayout, fitsFlex } from './layout/flex.js';
 export {
   collapseMarginList,
@@ -60,13 +70,14 @@ export {
   fitsBlock,
   isEmptyBlock,
 } from './layout/block.js';
-export { aspectFit, fitsAspect } from './layout/aspect.js';
+export { aspectFit, fitsAspect, OBJECT_POSITION_CENTER } from './layout/aspect.js';
 export type {
   AspectLayout,
   FitsAspectResult,
   FitsAspectSpec,
   IntrinsicImage,
   ObjectFit,
+  ObjectPosition,
   Slot,
 } from './layout/aspect.js';
 export type {
