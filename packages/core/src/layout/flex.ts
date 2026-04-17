@@ -40,18 +40,29 @@
  *          (which is `innerCross` when defined and the flex is a
  *          single line, otherwise the max cross-outer of the
  *          line's items).
+ *        - `baseline`: items are aligned so their first text
+ *          baselines coincide (row direction only — see note
+ *          below). Each `FlexItem.firstBaseline` gives the
+ *          distance in px from the item's border-box top to its
+ *          primary text baseline; the line's resolved baseline is
+ *          `max(leadingCrossMargin + firstBaseline)` across the
+ *          line's items, and every item's border-box top is
+ *          placed at `lineBaseline - firstBaseline`. Items that
+ *          omit `firstBaseline` use the synthesised fallback
+ *          (border-box top). The line's cross-size grows to hold
+ *          the baseline stack end-to-end.
  *
  * PRELIGHT-INVARIANT: this engine is pure. It never calls into
  * Pretext, canvas, or the DOM. Given the same inputs it always
  * returns the same layout.
  *
- * PRELIGHT-NEXT(v0.3 H5): `align-items: 'baseline'`. Baseline
- * alignment needs each item's first-baseline offset (from the
- * item's border-box top to its primary text baseline). That value
- * arrives with H5's `VerifySpec.measurementFonts` which threads
- * font metrics (ascent/descent) through `Measurement`. Landing
- * baseline alongside measurementFonts keeps the data and the
- * algorithm colocated.
+ * `align: 'baseline'` with `direction: 'column'` falls back to
+ * `'start'`. CSS Flex L1 §8.3 reroutes baseline alignment onto
+ * the item's "first available baseline in the cross axis"; for
+ * column flex the cross axis is horizontal and Prelight does
+ * not model horizontal baselines. Explicit fallback keeps
+ * behaviour predictable instead of silently producing garbage
+ * cross offsets.
  *
  * PRELIGHT-NEXT(v0.4+): `align-content` (distribute cross-axis
  * free space between wrapped lines). Today lines pack flush
@@ -71,7 +82,7 @@ export type FlexJustify =
   | 'space-around'
   | 'space-evenly';
 export type FlexWrap = 'nowrap' | 'wrap';
-export type FlexAlign = 'start' | 'end' | 'center' | 'stretch';
+export type FlexAlign = 'start' | 'end' | 'center' | 'stretch' | 'baseline';
 
 export interface FlexItem {
   box: Box;
@@ -88,6 +99,23 @@ export interface FlexItem {
   minMain?: number;
   /** `max-width` / `max-height` clamp. Defaults to Infinity. */
   maxMain?: number;
+  /**
+   * Offset in px from the item's border-box top to its primary
+   * text baseline, used only when the container's `align` is
+   * `'baseline'` on a row direction. Callers that render text
+   * derive this from their font's ascent (Prelight's `Measurement`
+   * is expected to expose ascent in a later phase).
+   *
+   * Omitted / undefined means "synthesised fallback": the item
+   * contributes no baseline and is treated as if its baseline
+   * coincides with its border-box top. This is a documented
+   * simplification of CSS Flex L1 §8.3's "synthesised baseline =
+   * outer start edge"; the two only disagree when items have
+   * non-zero leading cross-axis margins, and making the default
+   * trivial keeps non-text items (images, buttons, spacers)
+   * composable with baseline-aligned text items without ceremony.
+   */
+  firstBaseline?: number;
 }
 
 export interface FlexContainer {
@@ -163,6 +191,13 @@ export interface FlexLineLayout {
   /** Cross-axis extent of this line (max of item crossOuter; expanded
    *  to `innerCross` for single-line stretch when available). */
   crossSize: number;
+  /**
+   * Resolved first-baseline position on this line, measured from
+   * `crossStart`. Populated for `align: 'baseline'` only; 0 on
+   * every other align mode (no baseline synchronisation happens,
+   * so there is nothing meaningful to report).
+   */
+  baseline: number;
 }
 
 export interface FlexLayout {
@@ -457,18 +492,67 @@ function applyJustify(
 // ────────────────────────────────────────────────────────────────
 
 /**
+ * Line baseline helpers. For `align: 'baseline'` the per-item
+ * baseline offset from the outer top is `leadingCrossMargin +
+ * (firstBaseline ?? 0)`. The line's resolved baseline is the
+ * max across the line's items (the "deepest-ascent" item holds
+ * its outer top at the line cross-start; everyone else shifts
+ * down to match).
+ */
+function itemBaselineOffsetOuter(
+  item: FlexItem,
+  direction: FlexDirection,
+): number {
+  return (
+    leadingCrossMargin(item.box.margin, direction) +
+    (item.firstBaseline ?? 0)
+  );
+}
+
+/**
+ * Compute the cross-axis extent required to fit a baseline-
+ * aligned line, along with the line's resolved baseline Y (from
+ * the line's cross-start). The engine computes this before
+ * `applyAlign` so that line stacking sees the right line size
+ * even when baseline spacing grows the line beyond the max
+ * crossOuter.
+ */
+function computeBaselineLine(
+  items: FlexItem[],
+  direction: FlexDirection,
+): { crossSize: number; baseline: number } {
+  let lineBaseline = 0;
+  const offsets: number[] = new Array(items.length);
+  for (let i = 0; i < items.length; i++) {
+    const off = itemBaselineOffsetOuter(items[i]!, direction);
+    offsets[i] = off;
+    if (off > lineBaseline) lineBaseline = off;
+  }
+  let crossSize = 0;
+  for (let i = 0; i < items.length; i++) {
+    const outerTop = lineBaseline - offsets[i]!;
+    const outerBottom = outerTop + crossOuter(items[i]!.box, direction);
+    if (outerBottom > crossSize) crossSize = outerBottom;
+  }
+  return { crossSize, baseline: lineBaseline };
+}
+
+/**
  * Compute per-item cross sizes and cross offsets within a line.
  * `lineCrossSize` is the line's cross extent (already decided by
  * the caller). For `stretch`, items expand to fill the line
  * minus their cross-axis margin. For `start | end | center`,
  * items keep their natural cross-outer size and are positioned
- * within the line.
+ * within the line. For `baseline`, items keep their natural
+ * border-box size and are placed so `lineBaseline - (firstBaseline
+ * ?? 0)` lands on the border-box top.
  */
 function applyAlign(
   items: FlexItem[],
   lineCrossSize: number,
   align: FlexAlign,
   direction: FlexDirection,
+  lineBaseline: number,
 ): { cross: number[]; crossOffset: number[] } {
   const cross = new Array<number>(items.length);
   const crossOffset = new Array<number>(items.length);
@@ -483,6 +567,12 @@ function applyAlign(
       const stretched = Math.max(0, lineCrossSize - margin);
       cross[i] = stretched;
       crossOffset[i] = leading;
+    } else if (align === 'baseline') {
+      // Item outer-top = lineBaseline - baselineOffsetOuter.
+      // Border-box top = outer-top + leading.
+      const baselineOffsetOuter = leading + (item.firstBaseline ?? 0);
+      cross[i] = naturalBorderBox;
+      crossOffset[i] = lineBaseline - baselineOffsetOuter + leading;
     } else {
       cross[i] = naturalBorderBox;
       const slack = lineCrossSize - naturalOuter;
@@ -505,7 +595,15 @@ export function computeFlexLayout(
 ): FlexLayout {
   const direction = container.direction ?? 'row';
   const wrap = container.wrap ?? 'nowrap';
-  const align = container.align ?? 'start';
+  const requestedAlign = container.align ?? 'start';
+  // Column + baseline is undefined in Prelight's baseline model
+  // (the cross axis is horizontal; no horizontal baselines). Fall
+  // back to `start` so callers get predictable behaviour instead
+  // of silently broken cross offsets.
+  const align: FlexAlign =
+    requestedAlign === 'baseline' && direction === 'column'
+      ? 'start'
+      : requestedAlign;
   const justify = container.justify ?? 'start';
   const gap = container.gap ?? 0;
   const crossGap = container.crossGap ?? gap;
@@ -571,13 +669,28 @@ export function computeFlexLayout(
   // unused container cross space between lines) is deferred to a
   // future release — today lines pack flush against the
   // cross-start edge.
-  const lineCrossSizes: number[] = resolved.map((line) => {
-    let max = 0;
-    for (const it of line.items) {
-      max = Math.max(max, crossOuter(it.box, direction));
+  // Per-line cross-axis sizing + baseline resolution.
+  // For `align: 'baseline'` each line's extent is derived from
+  // the baseline stack (items with more ascent push shorter-
+  // ascent items down, growing the line). For every other align
+  // mode the line extent is the max crossOuter.
+  const lineCrossSizes: number[] = new Array(resolved.length);
+  const lineBaselines: number[] = new Array(resolved.length);
+  for (let li = 0; li < resolved.length; li++) {
+    const line = resolved[li]!;
+    if (align === 'baseline') {
+      const b = computeBaselineLine(line.items, direction);
+      lineCrossSizes[li] = b.crossSize;
+      lineBaselines[li] = b.baseline;
+    } else {
+      let max = 0;
+      for (const it of line.items) {
+        max = Math.max(max, crossOuter(it.box, direction));
+      }
+      lineCrossSizes[li] = max;
+      lineBaselines[li] = 0;
     }
-    return max;
-  });
+  }
   const singleLine = resolved.length === 1;
   if (singleLine && typeof container.innerCross === 'number') {
     lineCrossSizes[0] = Math.max(lineCrossSizes[0]!, container.innerCross);
@@ -591,11 +704,13 @@ export function computeFlexLayout(
   for (let li = 0; li < resolved.length; li++) {
     const line = resolved[li]!;
     const lineCrossSize = lineCrossSizes[li]!;
+    const lineBaseline = lineBaselines[li]!;
     const { cross, crossOffset } = applyAlign(
       line.items,
       lineCrossSize,
       align,
       direction,
+      lineBaseline,
     );
 
     const laidOut: FlexItemLayout[] = line.items.map((_item, i) => ({
@@ -611,6 +726,7 @@ export function computeFlexLayout(
       mainExtent: line.contentMain,
       crossStart: crossCursor,
       crossSize: lineCrossSize,
+      baseline: lineBaseline,
     });
     maxMainExtent = Math.max(maxMainExtent, line.contentMain);
 

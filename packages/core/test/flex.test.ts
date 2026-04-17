@@ -1,5 +1,5 @@
 /**
- * Flex-engine corpus: 72 cases.
+ * Flex-engine corpus: 90 cases.
  *
  * Each case encodes a flex-layout scenario with expected values
  * derived from CSS Flex L1 §9.7 ("Resolving Flexible Lengths"),
@@ -14,6 +14,10 @@
  *  41-52:   Wrap packing (multi-line)                             [v0.3 H1.1]
  *  53-64:   align-items (start, end, center, stretch)             [v0.3 H1.2]
  *  65-72:   wrap × align × direction integration                  [v0.3 H1.3]
+ *  73-78:   align-items: 'baseline' basics                        [v0.3 H5.1]
+ *  79-83:   Baseline line sizing + single-line innerCross         [v0.3 H5.2]
+ *  84-86:   Baseline × wrap (multi-line baselines)                [v0.3 H5.3]
+ *  87-90:   Baseline edge cases + column fallback                 [v0.3 H5.4]
  *
  * Pattern: `mkItem(borderBox, margin?)` builds a flex item with a
  * constant-size box so tests stay readable. The tests don't care
@@ -894,5 +898,332 @@ describe('H1.3 wrap × align integration', () => {
     expect(layout.items[1]!.crossOffset).toBe(0);
     // item 3 in col 2: crossStart 40 + slack 0 + leading 0 = 40.
     expect(layout.items[3]!.crossOffset).toBe(40);
+  });
+});
+
+describe("H5.1 align-items 'baseline' basics", () => {
+  test('C73 two items with same firstBaseline align identically', () => {
+    // Both items declare baseline = 16 from their border-box top.
+    // The line's resolved baseline = max(0 + 16, 0 + 16) = 16,
+    // and every item's border-box top = 16 - 16 = 0.
+    const layout = computeFlexLayout(
+      [
+        mkItem(40, 20, undefined, { firstBaseline: 16 }),
+        mkItem(60, 20, undefined, { firstBaseline: 16 }),
+      ],
+      { innerMain: 200, align: 'baseline' },
+    );
+    expect(layout.items[0]!.crossOffset).toBe(0);
+    expect(layout.items[1]!.crossOffset).toBe(0);
+    expect(layout.lines[0]!.baseline).toBe(16);
+  });
+
+  test('C74 larger firstBaseline pushes smaller-baseline item down', () => {
+    // Item 0: baseline 20, item 1: baseline 12. Line baseline =
+    // max(20, 12) = 20. Item 1 (shorter ascent) shifts down by
+    // 20 - 12 = 8 so its baseline lines up with item 0's.
+    const layout = computeFlexLayout(
+      [
+        mkItem(40, 30, undefined, { firstBaseline: 20 }),
+        mkItem(60, 20, undefined, { firstBaseline: 12 }),
+      ],
+      { innerMain: 200, align: 'baseline' },
+    );
+    expect(layout.items[0]!.crossOffset).toBe(0);
+    expect(layout.items[1]!.crossOffset).toBe(8);
+    expect(layout.lines[0]!.baseline).toBe(20);
+  });
+
+  test('C75 missing firstBaseline falls back to border-box top (treated as 0)', () => {
+    // Item 0 has baseline 18, item 1 omits firstBaseline (→ 0).
+    // Line baseline = 18. Item 1 sits at crossOffset = 18 - 0 = 18,
+    // so its border-box top aligns with the reference line's
+    // baseline — the synthesised fallback documented on FlexItem.
+    const layout = computeFlexLayout(
+      [
+        mkItem(50, 24, undefined, { firstBaseline: 18 }),
+        mkItem(40, 10),
+      ],
+      { innerMain: 200, align: 'baseline' },
+    );
+    expect(layout.items[0]!.crossOffset).toBe(0);
+    expect(layout.items[1]!.crossOffset).toBe(18);
+    expect(layout.lines[0]!.baseline).toBe(18);
+  });
+
+  test('C76 three items pick the max baseline and all line up to it', () => {
+    const layout = computeFlexLayout(
+      [
+        mkItem(30, 20, undefined, { firstBaseline: 14 }),
+        mkItem(30, 30, undefined, { firstBaseline: 22 }),
+        mkItem(30, 16, undefined, { firstBaseline: 10 }),
+      ],
+      { innerMain: 200, align: 'baseline' },
+    );
+    expect(layout.lines[0]!.baseline).toBe(22);
+    expect(layout.items[0]!.crossOffset).toBe(22 - 14); // 8
+    expect(layout.items[1]!.crossOffset).toBe(0);
+    expect(layout.items[2]!.crossOffset).toBe(22 - 10); // 12
+  });
+
+  test('C77 leading cross-axis margin shifts the baseline offset', () => {
+    // Item 0 has margin-top 10 and baseline 12 → baseline offset
+    // from outer-top = 10 + 12 = 22. Item 1 has baseline 18 and no
+    // margin → offset 18. Line baseline = max(22, 18) = 22.
+    // Item 0 crossOffset (border-box top) = outerTop + leading
+    //   = (22 - 22) + 10 = 10.
+    // Item 1 crossOffset = (22 - 18) + 0 = 4.
+    const margin: EdgeInsets = { top: 10, right: 0, bottom: 0, left: 0 };
+    const layout = computeFlexLayout(
+      [
+        mkItem(30, 20, margin, { firstBaseline: 12 }),
+        mkItem(30, 20, undefined, { firstBaseline: 18 }),
+      ],
+      { innerMain: 200, align: 'baseline' },
+    );
+    expect(layout.lines[0]!.baseline).toBe(22);
+    expect(layout.items[0]!.crossOffset).toBe(10);
+    expect(layout.items[1]!.crossOffset).toBe(4);
+  });
+
+  test('C78 non-baseline align modes leave line.baseline at 0', () => {
+    // Baseline is meaningful only when requested. Other modes must
+    // not accidentally compute or surface a baseline value.
+    for (const align of ['start', 'end', 'center', 'stretch'] as const) {
+      const layout = computeFlexLayout(
+        [
+          mkItem(40, 20, undefined, { firstBaseline: 16 }),
+          mkItem(40, 20, undefined, { firstBaseline: 12 }),
+        ],
+        { innerMain: 200, innerCross: 40, align },
+      );
+      expect(layout.lines[0]!.baseline).toBe(0);
+    }
+  });
+});
+
+describe('H5.2 baseline line sizing', () => {
+  test('C79 line cross-size grows to accommodate the baseline stack', () => {
+    // Items: (h=20, base=16) and (h=30, base=10). Offsets from
+    // outer-top: 16 and 10. Line baseline = 16. Outer-tops:
+    //   item 0: 16 - 16 = 0, bottom = 0 + 20 = 20.
+    //   item 1: 16 - 10 = 6, bottom = 6 + 30 = 36.
+    // Max crossOuter alone would be 30; baseline stack needs 36.
+    const layout = computeFlexLayout(
+      [
+        mkItem(40, 20, undefined, { firstBaseline: 16 }),
+        mkItem(40, 30, undefined, { firstBaseline: 10 }),
+      ],
+      { innerMain: 200, align: 'baseline' },
+    );
+    expect(layout.lines[0]!.crossSize).toBe(36);
+    expect(layout.contentCross).toBe(36);
+  });
+
+  test('C80 single-line innerCross expands the line but keeps baseline anchored', () => {
+    // Baseline stack needs 30 cross pixels; innerCross = 80 → line
+    // cross-size clamps up to 80. The stack still sits flush at
+    // the top (outer-top of the deepest-ascent item = 0), leaving
+    // empty space below.
+    const layout = computeFlexLayout(
+      [
+        mkItem(40, 20, undefined, { firstBaseline: 16 }),
+        mkItem(40, 30, undefined, { firstBaseline: 16 }),
+      ],
+      { innerMain: 200, innerCross: 80, align: 'baseline' },
+    );
+    expect(layout.lines[0]!.crossSize).toBe(80);
+    expect(layout.lines[0]!.baseline).toBe(16);
+    expect(layout.items[0]!.crossOffset).toBe(0);
+    expect(layout.items[1]!.crossOffset).toBe(0);
+    expect(layout.crossOverflows).toBe(false);
+  });
+
+  test('C81 deep-descent item extends the line past baseline row', () => {
+    // Item 0: h=40, base=10 → 30px descent below baseline.
+    // Item 1: h=20, base=16 → 4px descent.
+    // Line baseline = max(10, 16) = 16. Outer-tops:
+    //   item 0: 16 - 10 = 6, bottom = 46.
+    //   item 1: 0, bottom = 20.
+    // Line cross-size = 46.
+    const layout = computeFlexLayout(
+      [
+        mkItem(40, 40, undefined, { firstBaseline: 10 }),
+        mkItem(40, 20, undefined, { firstBaseline: 16 }),
+      ],
+      { innerMain: 200, align: 'baseline' },
+    );
+    expect(layout.lines[0]!.crossSize).toBe(46);
+    expect(layout.items[0]!.crossOffset).toBe(6);
+    expect(layout.items[1]!.crossOffset).toBe(0);
+  });
+
+  test('C82 baseline stack overflows innerCross → crossOverflows', () => {
+    const fit = fitsFlex({
+      children: [
+        mkItem(40, 40, undefined, { firstBaseline: 10 }),
+        mkItem(40, 20, undefined, { firstBaseline: 16 }),
+      ],
+      container: { innerMain: 200, innerCross: 30, align: 'baseline' },
+    });
+    expect(fit.ok).toBe(false);
+    // Line needs 46 > innerCross 30; the stretch-expansion branch
+    // does NOT apply (baseline is not stretch).
+    expect(fit.layout.lines[0]!.crossSize).toBe(46);
+    expect(fit.reasons[0]).toMatch(/cross-axis overflow/);
+  });
+
+  test('C83 identical items → baseline line size equals max crossOuter', () => {
+    // When every item has the same (leading + firstBaseline), no
+    // item shifts down, so the baseline stack is not larger than
+    // the natural max crossOuter. Guards against accidental
+    // line-size inflation when baseline happens to be set
+    // uniformly across a line.
+    const layout = computeFlexLayout(
+      [
+        mkItem(40, 24, undefined, { firstBaseline: 18 }),
+        mkItem(60, 24, undefined, { firstBaseline: 18 }),
+        mkItem(20, 24, undefined, { firstBaseline: 18 }),
+      ],
+      { innerMain: 200, align: 'baseline' },
+    );
+    expect(layout.lines[0]!.crossSize).toBe(24);
+    expect(layout.lines[0]!.baseline).toBe(18);
+    for (const item of layout.items) {
+      expect(item.crossOffset).toBe(0);
+    }
+  });
+});
+
+describe('H5.3 baseline × wrap (multi-line)', () => {
+  test('C84 each wrapped line resolves its own baseline independently', () => {
+    // 4 items wrap into two lines of two items each. Line 1 items
+    // have baselines (16, 10); line 2 items have (8, 20).
+    // Line 1 baseline = 16, line 2 baseline = 20.
+    const layout = computeFlexLayout(
+      [
+        mkItem(100, 20, undefined, { firstBaseline: 16 }),
+        mkItem(100, 20, undefined, { firstBaseline: 10 }),
+        mkItem(100, 20, undefined, { firstBaseline: 8 }),
+        mkItem(100, 30, undefined, { firstBaseline: 20 }),
+      ],
+      { innerMain: 200, wrap: 'wrap', align: 'baseline' },
+    );
+    expect(layout.lines).toHaveLength(2);
+    expect(layout.lines[0]!.baseline).toBe(16);
+    expect(layout.lines[1]!.baseline).toBe(20);
+  });
+
+  test('C85 multi-line baseline stacks with crossGap between lines', () => {
+    // Line 1: baselines (16, 16) on h=20 items → no shifts, both
+    // outer-tops at 0, bottoms at 20 → crossSize = 20.
+    // Line 2: baselines (20, 8) on h=30 items → line baseline =
+    // 20; outer-top of item a = 0 (bottom 30), item b = 20 - 8 =
+    // 12 (bottom 42). crossSize = 42 — the deep-descent item b
+    // grows the line past the natural max crossOuter. With
+    // crossGap = 8, contentCross = 20 + 8 + 42 = 70.
+    const layout = computeFlexLayout(
+      [
+        mkItem(100, 20, undefined, { firstBaseline: 16 }),
+        mkItem(100, 20, undefined, { firstBaseline: 16 }),
+        mkItem(100, 30, undefined, { firstBaseline: 20 }),
+        mkItem(100, 30, undefined, { firstBaseline: 8 }),
+      ],
+      {
+        innerMain: 200,
+        wrap: 'wrap',
+        crossGap: 8,
+        align: 'baseline',
+      },
+    );
+    expect(layout.lines).toHaveLength(2);
+    expect(layout.lines[0]!.crossSize).toBe(20);
+    expect(layout.lines[1]!.crossSize).toBe(42);
+    expect(layout.lines[1]!.crossStart).toBe(28); // 20 + 8
+    expect(layout.contentCross).toBe(70);
+  });
+
+  test('C86 multi-line baseline reports crossOverflows when stack exceeds innerCross', () => {
+    const fit = fitsFlex({
+      children: [
+        mkItem(100, 20, undefined, { firstBaseline: 16 }),
+        mkItem(100, 20, undefined, { firstBaseline: 16 }),
+        mkItem(100, 30, undefined, { firstBaseline: 20 }),
+        mkItem(100, 30, undefined, { firstBaseline: 8 }),
+      ],
+      container: {
+        innerMain: 200,
+        innerCross: 40, // line 1 (20) + line 2 (30) = 50 > 40
+        wrap: 'wrap',
+        align: 'baseline',
+      },
+    });
+    expect(fit.ok).toBe(false);
+    expect(fit.reasons[0]).toMatch(/cross-axis overflow/);
+  });
+});
+
+describe('H5.4 baseline edge cases', () => {
+  test('C87 direction column + align baseline falls back to start', () => {
+    // Column flex has a horizontal cross axis; Prelight does not
+    // model horizontal baselines, so `align: 'baseline'` must
+    // reduce to `start` behaviour. The new `line.baseline` field
+    // stays at 0 under the fallback — callers can detect that the
+    // baseline semantics did not apply.
+    const layout = computeFlexLayout(
+      [
+        mkItem(20, 40, undefined, { firstBaseline: 10 }),
+        mkItem(40, 40, undefined, { firstBaseline: 20 }),
+      ],
+      {
+        innerMain: 200,
+        direction: 'column',
+        align: 'baseline',
+      },
+    );
+    // Cross axis is width. With start, each item sits at cross-
+    // offset = 0; the line cross-size is max(20, 40) = 40.
+    expect(layout.lines[0]!.crossSize).toBe(40);
+    expect(layout.items[0]!.crossOffset).toBe(0);
+    expect(layout.items[1]!.crossOffset).toBe(0);
+    expect(layout.lines[0]!.baseline).toBe(0);
+  });
+
+  test('C88 empty items + baseline yields an empty layout', () => {
+    const layout = computeFlexLayout([], {
+      innerMain: 200,
+      align: 'baseline',
+    });
+    expect(layout.items).toEqual([]);
+    expect(layout.lines).toEqual([]);
+    expect(layout.contentCross).toBe(0);
+  });
+
+  test('C89 single item + baseline lands at crossOffset 0 with baseline = firstBaseline', () => {
+    const layout = computeFlexLayout(
+      [mkItem(60, 24, undefined, { firstBaseline: 18 })],
+      { innerMain: 200, align: 'baseline' },
+    );
+    expect(layout.items[0]!.crossOffset).toBe(0);
+    expect(layout.lines[0]!.baseline).toBe(18);
+    expect(layout.lines[0]!.crossSize).toBe(24);
+  });
+
+  test('C90 firstBaseline larger than item height clamps descent to 0', () => {
+    // Item 0: h=20, base=30 → baseline above border-box bottom,
+    // "descent" section is negative. Item 1 has h=20, base=10.
+    // Line baseline = 30. Outer-tops: 0 and 20. Bottoms: 20 and
+    // 40. Line cross-size = 40.
+    const layout = computeFlexLayout(
+      [
+        mkItem(40, 20, undefined, { firstBaseline: 30 }),
+        mkItem(40, 20, undefined, { firstBaseline: 10 }),
+      ],
+      { innerMain: 200, align: 'baseline' },
+    );
+    expect(layout.lines[0]!.baseline).toBe(30);
+    expect(layout.items[0]!.crossOffset).toBe(0);
+    expect(layout.items[1]!.crossOffset).toBe(20);
+    expect(layout.lines[0]!.crossSize).toBe(40);
   });
 });

@@ -6,6 +6,70 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Phase H5 — v0.3 `align-items: 'baseline'` (2026-04-17)
+
+- **Baseline alignment in flex** — `FlexAlign` union extended
+  with `'baseline'`, rounding out the H1 `align-items` set
+  (`start | end | center | stretch | baseline`). The H1 cliff
+  deferred this from that phase because baseline alignment
+  needs each item's first-baseline offset; shipping it in a
+  standalone H5 keeps the geometry work separate from the
+  font-metrics plumbing. Retires
+  `PRELIGHT-NEXT(v0.3 H5)` in `packages/core/src/layout/flex.ts`.
+  (H5)
+- **`FlexItem.firstBaseline?: number`** — distance in px from
+  the item's border-box top to its primary text baseline.
+  Caller-supplied; undefined means "synthesised fallback"
+  (treated as 0, so the border-box top acts as the baseline).
+  This is a documented simplification of CSS Flex L1 §8.3's
+  outer-margin-edge fallback that keeps the default trivial
+  for non-text items (images, spacers, buttons) composing
+  alongside baseline-aligned text. (H5)
+- **`FlexLineLayout.baseline: number`** — resolved first-
+  baseline position on each line, measured from the line's
+  `crossStart`. Populated for `align: 'baseline'` only; 0
+  everywhere else. Exposed so callers that stack custom
+  content on top of a flex line can re-use the resolved
+  baseline coordinate. (H5)
+- **Algorithm** — per line:
+  `baselineOffsetOuter_i = leading_i + (firstBaseline_i ?? 0)`,
+  `lineBaseline = max(baselineOffsetOuter)`, each item's
+  border-box top = `lineBaseline - (firstBaseline_i ?? 0)`.
+  Line cross-size grows to `max(outerBottom_i)` which can
+  exceed the natural `max crossOuter` when a deep-descent item
+  pushes the line's bottom past other items — test C81 pins
+  this behaviour. (H5)
+- **`direction: 'column' + align: 'baseline'` falls back to
+  `'start'`** — Prelight's baseline model is a vertical text
+  baseline; column flex has a horizontal cross axis with no
+  meaningful baseline. Documented explicitly instead of
+  silently producing broken cross offsets; `line.baseline`
+  stays 0 under the fallback so callers can detect it. (H5)
+- **Evidence**: 18 new unit tests in
+  `packages/core/test/flex.test.ts` (C73–C90) across four
+  groups: baseline basics (6), line sizing (5), wrap
+  interaction (3), and edge cases (4 — column fallback, empty
+  items, single item, `firstBaseline > height` clamping). All
+  72 pre-existing flex cases pass unchanged; the `baseline`
+  field on non-baseline lines is additive. (H5)
+- **Bundle impact**: `@prelight/core` grew 21.36 → 21.90 KB
+  min / 8.14 → 8.35 KB gz (+0.54 KB min / +0.21 KB gz). Well
+  below the 1 KB single-phase tripwire — no budget bump. The
+  22.00 KB min / 8.50 KB gz budget now has 0.10 KB min /
+  0.15 KB gz headroom remaining; H6–H8 core work may need a
+  deliberate bump (same pattern as H1 / H3). (H5)
+- **Honest gap**: no browser ground-truth. The flex harness
+  still does not exist; claiming browser-verified baseline
+  positions would violate the evidence invariant. The
+  `cjk.ts` `PRELIGHT-NEXT(v0.3)` marker for
+  `VerifySpec.measurementFonts` is **retained** (not retagged)
+  so a future phase can retire it alongside ascent/descent
+  threading through `Measurement`. Keeping H5 to pure geometry
+  lets it commit cleanly without dragging in the font-metrics
+  contract. (H5)
+- **Test count**: `bun run test` → 383 passing (core 246,
+  react 80, vitest 11, jest 5, cli 41); +18 vs H4. (H5)
+
 ### Phase H4 — v0.3 slot markers for multi-slot components (2026-04-17)
 
 - **`data-prelight-slot` marker convention** in `@prelight/react`:

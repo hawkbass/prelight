@@ -78,7 +78,7 @@ cannot reproduce a number, remove the claim — do not soften it.
 bun install                 # one-time
 bun run typecheck           # every package
 bun run build               # every package
-bun run test                # 365 tests (v0.2 + v0.3 H1–H4), ~3s
+bun run test                # 383 tests (v0.2 + v0.3 H1–H5), ~3s
 bun run measure-bundle      # quick size check
 ```
 

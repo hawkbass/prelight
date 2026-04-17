@@ -7,6 +7,152 @@ rewriting history.
 
 ---
 
+## 2026-04-17 — v0.3 H5 `align-items: 'baseline'`: evidence status
+
+Environment: Windows 10.0.26200, Bun 1.3.11, @prelight/core
+internal build (committed after H4 as a65781d), no browser run.
+
+### What was implemented
+
+The `PRELIGHT-NEXT(v0.3 H5)` marker in
+`packages/core/src/layout/flex.ts` — the H1-deferred baseline
+alignment work — is retired. Baseline support now lives in the
+flex engine as a fifth `FlexAlign` mode alongside
+`start | end | center | stretch`.
+
+Surface changes:
+
+- `FlexAlign` union extended with `'baseline'`.
+- `FlexItem` gains an optional `firstBaseline?: number` —
+  distance in px from the item's border-box top to its primary
+  text baseline. Undefined means "synthesised fallback"
+  (treated as 0, i.e. the item's border-box top acts as its
+  baseline). This is a documented simplification of CSS Flex
+  L1 §8.3's "outer start edge" fallback; the two only diverge
+  when items have non-zero leading cross-axis margins, and
+  making the default trivial lets non-text items (images,
+  spacers, buttons) compose with baseline-aligned text items
+  without ceremony.
+- `FlexLineLayout` gains a `baseline: number` field — the
+  resolved line baseline measured from `crossStart`. Populated
+  for `align: 'baseline'` only; 0 everywhere else.
+- `direction: 'column'` + `align: 'baseline'` falls back to
+  `'start'`. Prelight's baseline model is a vertical text
+  baseline; the column cross axis is horizontal, so baseline
+  semantics do not apply. Documented explicitly to keep
+  behaviour predictable instead of silently producing broken
+  cross offsets.
+
+Algorithm (per line):
+
+1. For each item compute `baselineOffsetOuter = leading +
+   (firstBaseline ?? 0)` — the position of the baseline from
+   the item's outer-top.
+2. `lineBaseline = max(baselineOffsetOuter)` across the line.
+3. Each item's outer-top is placed at `lineBaseline -
+   baselineOffsetOuter`; border-box top is
+   `outerTop + leading`.
+4. Line cross-size is the max outer-bottom — which can exceed
+   the natural max crossOuter when an item's descent pushes
+   it below other items' bottoms. Tests C79, C81, C85 pin this
+   behaviour explicitly.
+
+### Available evidence (unit-test level)
+
+- **H5 corpus**: 18 cases in `packages/core/test/flex.test.ts`
+  (C73–C90). Four groups:
+
+  1. Baseline basics (C73–C78): same-baseline alignment, mixed
+     baselines pushing shorter-ascent items down, missing
+     `firstBaseline` falling back to border-box top, three-item
+     baseline consensus, leading margin shifting the baseline
+     offset, and a guard that non-baseline align modes keep
+     `line.baseline === 0` — the baseline field stays opt-in.
+  2. Line sizing (C79–C83): line grows to hold the baseline
+     stack, single-line `innerCross` clamps upward without
+     changing the baseline anchor, deep-descent items extend
+     the line past the baseline row, overflow detection via
+     `fitsFlex` + `crossOverflows`, and uniform baselines
+     collapse back to `max crossOuter` without accidental
+     line-size inflation.
+  3. Wrap interaction (C84–C86): each wrapped line resolves
+     its own baseline; multi-line `crossGap` stacks lines with
+     per-line baseline-driven cross sizes; multi-line
+     `crossOverflows` reports the true stacked extent.
+  4. Edge cases (C87–C90): `column + baseline` falls back to
+     `start`; empty input produces empty layout; single item
+     trivially aligns at `crossOffset 0`; `firstBaseline >
+     item height` correctly clamps the descent region.
+
+- **Regression gates**: all 72 pre-existing flex cases pass
+  unchanged. The `baseline: 0` field on every other align mode
+  is additive (no pre-existing assertion accesses it) and the
+  `applyAlign` signature change is internal.
+
+- **Full gates** (bun, Vitest, Jest, bundle budget) all green:
+  typecheck 5/5, build 5/5, test **383 passing** (core 246,
+  react 80, vitest 11, jest 5, cli 41; was 365 at end of H4),
+  bundle `core` 21.90 KB min / 8.35 KB gz within the existing
+  22.00 / 8.50 budget.
+
+### What is **not** in this release (the honest gap)
+
+- **No browser-confirmed round-trip** against Chromium /
+  WebKit / Firefox. `ground-truth/harness.ts` remains a text-
+  layout oracle; there is still no flex-container corpus with
+  per-item rect extraction and no engine-calibrated tolerance
+  for cross-axis baseline position. The H1 cliff rationale
+  applies identically: building that infrastructure is a
+  multi-day phase of its own. Same unit-tests-only evidence
+  path carried forward from H1/H2/H3.
+
+- **No font-ascent integration.** H5 ships the baseline
+  algorithm with a user-supplied `firstBaseline`. Deriving
+  that value from a font's ascent (so `@prelight/react` can
+  auto-resolve it from the cascade-resolved font) is a
+  separate, still-pending piece of work. The `cjk.ts`
+  `PRELIGHT-NEXT(v0.3)` marker for surfacing
+  `VerifySpec.measurementFonts` as a contract is **retained**
+  — not retagged — so a future phase can retire it alongside
+  ascent/descent threading through `Measurement`. Splitting
+  these lets H5 land in its own tight commit instead of
+  conflating baseline geometry with font-metrics plumbing.
+
+In the interim the evidence invariant binds H5 as follows:
+
+- README / site may claim "baseline alignment in row flex,
+  driven by caller-supplied `firstBaseline`" and reference
+  this FINDINGS entry.
+- README / site MUST NOT claim "baseline alignment
+  automatically derived from resolved fonts" — that's a later
+  phase.
+- README / site MUST NOT claim browser-verified baseline
+  positions until the flex ground-truth harness exists.
+
+### Bundle impact
+
+`@prelight/core` grew 21.36 → 21.90 KB minified / 8.14 → 8.35
+KB gzipped (+0.54 KB min / +0.21 KB gz). Well below the 1 KB
+single-phase tripwire; no budget bump required. Remaining
+budget headroom: 0.10 KB min / 0.15 KB gz (22.00 / 8.50). Tight
+for H6–H8 core work; if another core phase also grows ~0.5 KB
+min the budget will need a deliberate bump following the
+existing H1 / H3 precedent.
+
+### Evidence invariant reminder
+
+- H5 shipping into `@prelight/core` with unit-level evidence
+  is appropriate for the baseline *algorithm* (pure geometry
+  given user-supplied `firstBaseline`).
+- When ascent threading lands and `@prelight/react`'s cascade
+  derives `firstBaseline` automatically, that claim goes
+  beyond pure geometry — it depends on font metrics matching
+  what browsers would render. That claim will require a
+  real browser oracle before README/site claims "baselines
+  align to real-browser pixel positions".
+
+---
+
 ## 2026-04-17 — v0.3 H4 slot markers for multi-slot components: evidence status
 
 Environment: Windows 10.0.26200, Bun 1.3.11, @prelight/react
