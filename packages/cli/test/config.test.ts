@@ -7,10 +7,11 @@ import { findConfig, loadConfig } from '../src/config.js';
 
 function tmp(): string {
   // On Windows CI runners, tmpdir() returns a path containing an 8.3 short
-  // component (C:\Users\RUNNER~1\...). Vite's module loader URL-encodes that
-  // tilde to %7E and then fails to locate the file. realpathSync resolves the
-  // short form to the canonical long path before the loader sees it.
-  return realpathSync(mkdtempSync(join(tmpdir(), 'prelight-cli-test-')));
+  // component (C:\Users\RUNNER~1\...). Vite's module loader URL-encodes the
+  // tilde to %7E and then fails to locate the file. realpathSync.native uses
+  // libuv's GetFinalPathNameByHandle under the hood, which expands the short
+  // name to the full long-form path; the JS realpathSync does not.
+  return realpathSync.native(mkdtempSync(join(tmpdir(), 'prelight-cli-test-')));
 }
 
 describe('findConfig', () => {

@@ -86,10 +86,11 @@ function withSilencedConsole(): {
 let workdir: string;
 
 beforeEach(() => {
-  // realpathSync canonicalises the Windows 8.3 short path
-  // (C:\Users\RUNNER~1\...) into its long form; without it Vite's loader
-  // URL-encodes the tilde and fails to locate the config file.
-  workdir = realpathSync(mkdtempSync(join(tmpdir(), 'prelight-cli-main-')));
+  // realpathSync.native expands Windows 8.3 short paths (C:\Users\RUNNER~1\…)
+  // to their canonical long form before Vite's loader can URL-encode the
+  // tilde to %7E and break module resolution. The non-native realpathSync
+  // does not expand 8.3 names on Windows; only the libuv-backed variant does.
+  workdir = realpathSync.native(mkdtempSync(join(tmpdir(), 'prelight-cli-main-')));
 });
 
 afterEach(() => {
