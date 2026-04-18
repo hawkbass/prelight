@@ -79,10 +79,12 @@ jobs:
 
       - name: Speed comparison bench
         # Regression-detect the 23× claim. Runs Prelight vs.
-        # Playwright DOM measurement for 10 iterations (reduced from
-        # the local 50) to keep CI time reasonable while still
-        # catching order-of-magnitude drift.
-        run: npx tsx bench.ts --iterations=10 --json > bench.json
+        # Playwright DOM measurement for 50 iterations -- matches the
+        # local sample size the headline number was measured against,
+        # so CI evaluates the same distribution shape the public claim
+        # rests on, not a 10-iteration noisy proxy. Adds only a few
+        # seconds of wall time (Playwright ~45ms × 40 extra iters).
+        run: npx tsx bench.ts --iterations=50 --json > bench.json
         working-directory: demos/speed-comparison
 
       - name: Inspect bench result
