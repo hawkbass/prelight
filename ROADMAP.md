@@ -4,7 +4,7 @@ This is the authoritative scope document. Every `PRELIGHT-NEXT(...)` marker in t
 
 ---
 
-## v0.1 — Text layout verification (current)
+## v0.1 — Text layout verification (shipped)
 
 **Ships:** [`@prelight/core`](./packages/core), [`@prelight/react`](./packages/react), [`@prelight/vitest`](./packages/vitest), [`@prelight/jest`](./packages/jest), [`@prelight/cli`](./packages/cli).
 
@@ -27,15 +27,17 @@ This is the authoritative scope document. Every `PRELIGHT-NEXT(...)` marker in t
 - `white-space: pre-*`, hyphenation, `text-wrap: balance`
 - Multi-component composition (parent constrains child)
 
-## v0.2 — Structural primitives
+## v0.2 — Structural primitives (current)
 
 **Adds:** `@prelight/core` learns a minimal structural model:
-- Block flow with margin collapse
-- Flex (single-axis, no wrap first, then wrap)
-- Image aspect ratios given explicit `width` + `height` or intrinsic dimensions
-- Padding / border in the box model
+- Block flow with adjacent-sibling vertical margin collapsing
+- Flex (single-axis, no wrap — wrap deferred to v0.3)
+- Image aspect ratios via `object-fit` (`contain` / `cover` / `fill` / `scale-down` / `none`)
+- `Box` + `EdgeInsets` primitives (padding / border / margin)
+- `@prelight/react` gains `resolveStyles()` + `StyleResolver` plugins (inline + CSS variables built in)
+- `@prelight/cli` gains TTY-aware reporter with `NO_COLOR` / `FORCE_COLOR` honoured
 
-**Does not add:** grid, positioning (`absolute`, `fixed`), containment, transforms.
+**Does not add:** grid, positioning (`absolute`, `fixed`), containment, transforms, flex-wrap.
 
 **Why this order:** flex + block covers ~80% of production UI. Grid is a larger investment (see v1.0). Positioning is rare enough in component libraries that a v1.1 slot is fine.
 

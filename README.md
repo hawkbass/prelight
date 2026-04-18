@@ -73,7 +73,18 @@ Structural layout (v0.2):
 
 ```ts
 import '@prelight/vitest'
-import { box, zeroInsets } from '@prelight/core'
+import { box, zeroInsets, type Measurement } from '@prelight/core'
+
+// Build a Measurement for a known-size item. In real code you'd use
+// `verify()` or `resolveStyles()` to produce this from text + font.
+const m = (w: number, h: number): Measurement => ({
+  cell: { language: 'en', scale: 1, width: w },
+  lines: 1,
+  measuredWidth: w,
+  measuredHeight: h,
+  naturalWidth: w,
+  overflows: false,
+})
 
 test('hero image covers its slot without clipping more than 2px', () => {
   expect({
@@ -85,14 +96,10 @@ test('hero image covers its slot without clipping more than 2px', () => {
 })
 
 test('nav bar packs within the header at every scale', () => {
-  const children = [
-    { box: box({ content: m(80, 32), margin: zeroInsets() }) },
-    { box: box({ content: m(80, 32), margin: zeroInsets() }) },
-    { box: box({ content: m(80, 32), margin: zeroInsets() }) },
-  ]
+  const pill = { box: box({ content: m(80, 32), margin: zeroInsets() }) }
   expect({
     container: { innerMain: 360, gap: 12, justify: 'space-between' },
-    children,
+    children: [pill, pill, pill],
   }).toFitFlex()
 })
 ```
