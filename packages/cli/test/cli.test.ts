@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -86,7 +86,10 @@ function withSilencedConsole(): {
 let workdir: string;
 
 beforeEach(() => {
-  workdir = mkdtempSync(join(tmpdir(), 'prelight-cli-main-'));
+  // realpathSync canonicalises the Windows 8.3 short path
+  // (C:\Users\RUNNER~1\...) into its long form; without it Vite's loader
+  // URL-encodes the tilde and fails to locate the config file.
+  workdir = realpathSync(mkdtempSync(join(tmpdir(), 'prelight-cli-main-')));
 });
 
 afterEach(() => {
