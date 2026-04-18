@@ -1,0 +1,25 @@
+{
+  "name": "prelight-review-probes",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Throwaway fixtures for REVIEW-v0.3.0.md probes P1, P3, P4, P5, P6.",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "p3": "bun run p3-mixed-script.ts"
+  },
+  "dependencies": {
+    "@chenglou/pretext": "0.0.3",
+    "@prelight/core": "workspace:*",
+    "@prelight/react": "workspace:*",
+    "@prelight/vitest": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "happy-dom": "^15",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  }
+}

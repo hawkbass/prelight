@@ -11,6 +11,7 @@
     "demos/dogfood-library",
     "demos/runtime-probe-emotion",
     "demos/speed-comparison",
+    "review/probes",
     "ground-truth",
     "site",
     "corpus"
