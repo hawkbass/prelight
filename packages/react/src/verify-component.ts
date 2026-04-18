@@ -42,6 +42,10 @@ import {
 
 import { extractText } from './extract.js';
 import { resolveStyles, type ResolveStylesOptions } from './resolve-styles.js';
+import {
+  resolveStylesRuntime,
+  type ResolveStylesRuntimeOptions,
+} from './runtime-probe.js';
 import { extractSlotText } from './slots.js';
 
 export interface ComponentVerifySpec {
@@ -73,9 +77,46 @@ export interface ComponentVerifySpec {
    * an element; an absent slot throws with the known-slots list.
    */
   slot?: string;
+  /**
+   * v0.3 (H7) — use the runtime style probe instead of the
+   * static walker. When `true`, `autoResolve` is implied:
+   * Prelight mounts the component into happy-dom, lets the
+   * CSS-in-JS library inject its `<style>` tags, and reads
+   * `getComputedStyle()` on the target (or slot) node. The
+   * `resolvers` option is ignored in runtime mode — the
+   * computed-style engine runs the cascade for us. happy-dom
+   * is an optional peer dependency; runtime mode throws with
+   * an install hint if it isn't installed.
+   *
+   * Call signature becomes `async` when `runtime: true` because
+   * the probe mounts React + commits before reading. Use
+   * `await verifyComponent({ ..., runtime: true })`.
+   */
+  runtime?: boolean;
+  /** Forwarded to `resolveStylesRuntime()` when `runtime: true`. */
+  runtimeOptions?: ResolveStylesRuntimeOptions;
 }
 
-export function verifyComponent(spec: ComponentVerifySpec): VerifyResult {
+// Overloads: `runtime: true` changes the return type to a promise
+// because the probe has to mount + commit React before reading
+// computed styles. The static path stays synchronous.
+export function verifyComponent(
+  spec: ComponentVerifySpec & { runtime: true },
+): Promise<VerifyResult>;
+export function verifyComponent(
+  spec: ComponentVerifySpec & { runtime?: false | undefined },
+): VerifyResult;
+export function verifyComponent(
+  spec: ComponentVerifySpec,
+): VerifyResult | Promise<VerifyResult>;
+export function verifyComponent(
+  spec: ComponentVerifySpec,
+): VerifyResult | Promise<VerifyResult> {
+  if (spec.runtime === true) return runVerifyComponentRuntime(spec);
+  return runVerifyComponentStatic(spec);
+}
+
+function runVerifyComponentStatic(spec: ComponentVerifySpec): VerifyResult {
   const languages = spec.languages ?? ['default'];
   const text: Record<string, string> = {};
   let font = spec.font;
@@ -104,26 +145,78 @@ export function verifyComponent(spec: ComponentVerifySpec): VerifyResult {
     }
   }
 
-  if (font === undefined || maxWidth === undefined || lineHeight === undefined) {
-    const missing: string[] = [];
-    if (font === undefined) missing.push('font');
-    if (maxWidth === undefined) missing.push('maxWidth');
-    if (lineHeight === undefined) missing.push('lineHeight');
-    const suffix = spec.autoResolve
-      ? ` (autoResolve did not find inline styles for these; sources: ${
-          resolved?.sources.map((s) => `${s.prop}=${s.value}@${s.elementType}`).join(', ') ?? 'none'
-        })`
-      : '';
-    throw new Error(`verifyComponent: missing required style inputs: ${missing.join(', ')}${suffix}`);
-  }
+  assertStyleInputs(font, maxWidth, lineHeight, spec.autoResolve === true, resolved?.sources);
 
   return verify({
     text,
-    font,
-    maxWidth,
-    lineHeight,
+    font: font as string,
+    maxWidth: maxWidth as number,
+    lineHeight: lineHeight as number,
     constraints: spec.constraints,
     ...(spec.fontScales !== undefined ? { fontScales: spec.fontScales } : {}),
     ...(spec.languages !== undefined ? { languages: spec.languages } : {}),
   });
+}
+
+async function runVerifyComponentRuntime(
+  spec: ComponentVerifySpec,
+): Promise<VerifyResult> {
+  const languages = spec.languages ?? ['default'];
+  const text: Record<string, string> = {};
+  let font = spec.font;
+  let maxWidth = spec.maxWidth;
+  let lineHeight = spec.lineHeight;
+
+  // Render once for style resolution — same argument as the static
+  // path. Typography is language-invariant.
+  const firstLang = languages[0] ?? 'default';
+  const probeElement =
+    typeof spec.element === 'function' ? spec.element(firstLang) : spec.element;
+
+  const runtimeOpts: ResolveStylesRuntimeOptions = { ...(spec.runtimeOptions ?? {}) };
+  if (spec.slot !== undefined && runtimeOpts.slot === undefined) {
+    runtimeOpts.slot = spec.slot;
+  }
+  const resolved = await resolveStylesRuntime(probeElement, runtimeOpts);
+  font = font ?? resolved.font;
+  maxWidth = maxWidth ?? resolved.maxWidth;
+  lineHeight = lineHeight ?? resolved.lineHeight;
+
+  for (const lang of languages) {
+    const element =
+      typeof spec.element === 'function' ? spec.element(lang) : spec.element;
+    text[lang] = spec.slot !== undefined ? extractSlotText(element, spec.slot) : extractText(element);
+  }
+
+  assertStyleInputs(font, maxWidth, lineHeight, true, resolved.sources);
+
+  return verify({
+    text,
+    font: font as string,
+    maxWidth: maxWidth as number,
+    lineHeight: lineHeight as number,
+    constraints: spec.constraints,
+    ...(spec.fontScales !== undefined ? { fontScales: spec.fontScales } : {}),
+    ...(spec.languages !== undefined ? { languages: spec.languages } : {}),
+  });
+}
+
+function assertStyleInputs(
+  font: string | undefined,
+  maxWidth: number | undefined,
+  lineHeight: number | undefined,
+  autoResolveTried: boolean,
+  sources: readonly { prop: string; value: string; elementType: string }[] | undefined,
+): void {
+  if (font !== undefined && maxWidth !== undefined && lineHeight !== undefined) return;
+  const missing: string[] = [];
+  if (font === undefined) missing.push('font');
+  if (maxWidth === undefined) missing.push('maxWidth');
+  if (lineHeight === undefined) missing.push('lineHeight');
+  const suffix = autoResolveTried
+    ? ` (autoResolve did not find inline styles for these; sources: ${
+        sources?.map((s) => `${s.prop}=${s.value}@${s.elementType}`).join(', ') ?? 'none'
+      })`
+    : '';
+  throw new Error(`verifyComponent: missing required style inputs: ${missing.join(', ')}${suffix}`);
 }

@@ -8,12 +8,16 @@
     "check": "tsx run.ts",
     "check:json": "tsx run.ts --json",
     "check:strict": "tsx run.ts --strict",
+    "check:runtime": "tsx runtime-probe-run.ts",
+    "check:runtime:json": "tsx runtime-probe-run.ts --json",
+    "check:runtime:strict": "tsx runtime-probe-run.ts --strict",
     "install-browsers": "playwright install --with-deps chromium"
   },
   "devDependencies": {
     "@chenglou/pretext": "^0.0.3",
     "@prelight/core": "workspace:*",
     "@types/node": "^20.0.0",
+    "happy-dom": "^15.11.0",
     "playwright": "^1.48.0",
     "tsx": "^4.21.0",
     "typescript": "^5.7.0"

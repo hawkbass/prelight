@@ -7,6 +7,163 @@ rewriting history.
 
 ---
 
+## 2026-04-17 — v0.3 H7 runtime style probe: evidence status
+
+Environment: Windows 10.0.26200, Bun 1.3.11, Node 20 via `tsx`
+for the Playwright cross-engine sweep, `@prelight/react` post-H6c
+tree, happy-dom 15.11.7, Playwright 1.56 across chromium / webkit
+/ firefox. Unit artifact: `packages/react/test/runtime-probe.test.tsx`.
+Cross-engine artifact: live output of `bun run ground-truth:runtime -- --browser all`.
+
+### What was implemented
+
+H7 closes the final v0.3 gap: Prelight's static style walker
+(`resolveStyles()`) can only see what React's vDOM carries —
+inline `style` objects, explicit `font` / `maxWidth` /
+`lineHeight` props, and CSS custom properties expressed as
+inline `--foo`. That covers CSS Modules and plain className rules
+but leaves emotion, styled-components, and the `css` prop
+invisible: those libraries' styles don't land in the element
+tree until React mounts and the library injects a `<style>` tag.
+
+H7 adds a library-agnostic **runtime probe**,
+`resolveStylesRuntime()`, and threads it through `verifyComponent`
+behind an opt-in `runtime: true` flag. The probe:
+
+1. Detects an already-installed DOM (vitest/jest
+   `environment: 'happy-dom'`, a browser test runner, any
+   window/getComputedStyle pair on `globalThis`) and reuses it.
+   This is the preferred path because CSS-in-JS libraries detect
+   their runtime at import time — if the test runner installed a
+   DOM *before* emotion/styled-components loaded, they wake up in
+   client-side mode and inject their stylesheets where
+   `getComputedStyle()` can see them.
+2. Falls back to dynamically importing `happy-dom`, constructing
+   a fresh `Window`, and shadowing `globalThis` with DOM classes
+   (walked via `Object.defineProperty` to survive Node 21+'s
+   read-only `navigator` getter).
+3. Mounts the React subtree via `createRoot().render()`, waits
+   for `happyDOM.waitUntilComplete()`, then picks a target
+   element (data-prelight-slot for named slots, otherwise the
+   innermost text leaf), reads `getComputedStyle(target)`, and
+   walks the ancestor chain for non-inheriting properties
+   (`max-width`, `width`) so "innermost ancestor wins" matches
+   the static walker's semantic.
+4. Unmounts the root and either closes the happy-dom window (if
+   the probe owns it) or leaves the runner's DOM intact (if it
+   reused one). The restore path is always called, even on
+   exception, so a test crash can't leak a `window` into the
+   next test's `globalThis`.
+
+### Unit coverage
+
+30 cases in `packages/react/test/runtime-probe.test.tsx`, six
+groups:
+
+| group                                 | cases | what it proves                                                                             |
+|---------------------------------------|-------|--------------------------------------------------------------------------------------------|
+| H7.1 plain CSS + inline style         | 5     | runtime probe and static walker agree on the same inputs (no divergence for the easy case) |
+| H7.2 emotion (styled + css prop)      | 6     | static styles, dynamic props, `ThemeProvider`, nested styled, `css` prop, `:hover` isolation |
+| H7.3 styled-components v6             | 6     | static, transient props, ThemeProvider, nested, `attrs(...)`, `css` helper chunks          |
+| H7.4 CSS custom properties + cascade  | 4     | `var(--foo)` resolves through computed style; inner override wins; sources list populated  |
+| H7.5 slot-aware runtime resolution    | 4     | `data-prelight-slot` picks the slot; missing slot throws with known-slots; sibling isolation |
+| H7.6 `verifyComponent({ runtime: true })` | 5  | pass/fail parity, German overflow detection via runtime path, slot + explicit override wins |
+
+All 30 pass. Full `@prelight/react` suite: **110/110** (up from
+80; 30 new). Monorepo: **255/255** across core, react, cli, jest
+matcher, vitest matcher.
+
+### Ground-truth cross-engine agreement
+
+`ground-truth/runtime-probe-harness.ts` isolates the narrower
+question H7 depends on: **does happy-dom's
+`getComputedStyle()` return the same values real browsers do for
+the properties the probe reads?** If yes, then the probe's
+correctness against happy-dom transitively implies correctness
+against real browsers.
+
+17 fixtures (`ground-truth/runtime-probe-fixtures.ts`), each
+exercising one CSS resolution concern in isolation (inline style
+on leaf; inherited font through ancestor chain; class rule
+matched by selector; longhand-beats-shorthand; inline-beats-class;
+`var(--foo)` resolution; bold weight; italic style; nested cascade;
+descendant selector; `:hover` not leaking into base; unitless
+line-height; `line-height: normal`; `max-width: none` + width
+fallback; multi-class cascade order).
+
+| engine    | total | agree | disagree | agreement % |
+|-----------|-------|-------|----------|-------------|
+| chromium  | 17    | 17    | 0        | **100.00%** |
+| webkit    | 17    | 17    | 0        | **100.00%** |
+| firefox   | 17    | 17    | 0        | **100.00%** |
+
+One semantic adjustment the harness encodes: real browsers
+report a layout-used `width` for every laid-out element
+(e.g., a `<button class="btn">` with no declared width returns
+`width: 32px`); happy-dom, with no layout engine, returns `""`.
+That's not a CSSOM disagreement — the runtime probe correctly
+ignores layout-derived widths (`findAncestorBoxValue` filters
+`""` / `auto` / `%` on the `width` property) and only consumes a
+width when CSS explicitly declared it. The harness's
+`propertyMatches` encodes this semantic: width/max-width
+disagreements are noise when the fixture HTML never declared
+the property.
+
+### Bundle size impact
+
+`@prelight/react` grew 4.94 KB min / 1.72 KB gz (6.50 → 11.44 KB
+min; 2.88 → 4.60 KB gz). Breakdown:
+
+- `detectExistingWindow` + `loadHappyDomWindow` + `loadReactDomClient` — dynamic imports + shape guards (~0.8 KB min).
+- `installGlobals` / `restore` — `Object.defineProperty`-based shadowing that survives Node 21+ read-only getters, plus tracked installed-keys list for correct restore (~1.3 KB min).
+- `runVerifyComponentRuntime` — per-language mount/unmount loop, slot dispatch, explicit-override merge (~0.9 KB min).
+- `findAncestorBoxValue` + `collectCssVariables` + `composeFont` + `recordSource` — style assembly (~1.0 KB min).
+- Type shapes (`HappyDomWindow`, `HappyDomElement`, `ReactDomClient` interfaces) — 0 KB runtime, compiled away.
+
+`happy-dom` itself (~600 KB) is an optional peer dep loaded via
+dynamic import; it doesn't enter the react package bundle. Budget
+updated in `scripts/bundle-budget.json` from 6.50/2.88 to
+12.00/4.75 to give modest headroom for future probe hardening.
+`bun run measure-bundle:strict` passes.
+
+### Why library-agnostic beats per-library plugins
+
+H7 originally tracked as "StyleResolver plugin for emotion and a
+separate one for styled-components." Reframed to a single
+runtime probe because:
+
+- Every CSS-in-JS library's job is to get its styles into the
+  DOM. Once the styles are in the DOM, `getComputedStyle()` is
+  the browser-defined oracle for what the styles resolved to —
+  no library-specific logic needed on our side.
+- Per-library plugins would need version-pinning (emotion's
+  internal `cache` API changed in v11, v12; styled-components v5
+  vs. v6 differ in how they expose generated class names).
+- A runtime probe works for libraries we don't even know about
+  yet: Linaria, vanilla-extract's runtime path, Stitches,
+  Panda's runtime helpers, even future MDX-driven component
+  libraries. We don't opt into any specific implementation; we
+  read the end state.
+
+The cost is the opt-in flag (`runtime: true`) and the optional
+peer dep. Consumers who never use CSS-in-JS pay nothing; consumers
+who do gain coverage across every library they use now and every
+one they might use in the future.
+
+### Artifacts
+
+- `packages/react/src/runtime-probe.ts` — probe implementation.
+- `packages/react/src/verify-component.ts` — overload + runtime path.
+- `packages/react/package.json` — `happy-dom` as optional peer, emotion/styled-components as dev deps.
+- `packages/react/test/runtime-probe.test.tsx` — 30-case unit suite.
+- `packages/react/vitest.config.ts` — `environment: 'happy-dom'`.
+- `ground-truth/runtime-probe-fixtures.ts` — 17 fixture corpus.
+- `ground-truth/runtime-probe-harness.ts` — happy-dom ↔ real browser comparator.
+- `ground-truth/runtime-probe-run.ts` — CLI entry.
+- `scripts/measure-bundle.ts` + `scripts/bundle-budget.json` — new externals + raised `@prelight/react` budget.
+
+---
+
 ## 2026-04-17 — v0.3 H6c bundled emoji harness font: evidence status
 
 Environment: Windows 10.0.26200, Node 20 via `tsx` (Bun 1.3.11 is

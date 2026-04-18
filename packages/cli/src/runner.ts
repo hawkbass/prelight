@@ -60,7 +60,12 @@ export async function runVerification(config: PrelightConfig): Promise<RunnerSum
   const layouts = config.layouts ?? [];
 
   for (const test of tests) {
-    const result = verifyComponent(test);
+    // `verifyComponent` returns a promise when the test opts into
+    // the H7 runtime probe (`runtime: true`), and a synchronous
+    // `VerifyResult` otherwise. `await` on a non-promise is a
+    // no-op, so unifying both paths here costs nothing on the
+    // static path.
+    const result = await verifyComponent(test);
     runs.push({ test, result });
     cellsChecked += result.cellsChecked;
     if (!result.ok) {

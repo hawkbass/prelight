@@ -11,6 +11,137 @@ the work.
 
 ---
 
+## 2026-04-17 — v0.3 H7 landed (runtime style probe); next up H8 (v0.3.0-rc tagging)
+
+**Session transcript:** [v0.3 H7 runtime probe](70642c52-297d-4419-8e18-3894c42f3a0b)
+
+### State (not yet committed — handoff before the phase commit)
+
+H7 shipped on top of H6c. Everything below is in the working tree
+awaiting the single phase commit:
+
+- **`resolveStylesRuntime()` (new, `packages/react/src/runtime-probe.ts`)** —
+  library-agnostic runtime style resolution. Mounts React into
+  happy-dom (or a pre-installed DOM env), reads
+  `getComputedStyle()` on the picked target, walks the ancestor
+  chain for non-inheriting `max-width` / `width`, returns the same
+  `ResolvedStyles` shape as the static walker.
+- **`verifyComponent({ runtime: true })`** — new overload. Static
+  path (default) stays sync; runtime path returns `Promise<VerifyResult>`.
+- **`happy-dom` as optional peer dep of `@prelight/react`** —
+  `peerDependencies: { 'happy-dom': '>=15' }` +
+  `peerDependenciesMeta: { 'happy-dom': { optional: true } }`.
+  Consumers who never use `runtime: true` install nothing.
+- **Unit suite** — `packages/react/test/runtime-probe.test.tsx`,
+  30 cases across plain CSS, emotion (incl. `ThemeProvider` +
+  css prop), styled-components v6 (incl. `attrs`, `css` helper),
+  CSS variables, slot-aware resolution, and `verifyComponent`
+  integration.
+- **Ground-truth runtime harness (new)** —
+  `ground-truth/runtime-probe-{fixtures,harness,run}.ts` + new
+  npm scripts `ground-truth:runtime[:strict]`. 17 fixtures × 3
+  engines × 7 properties = 357 measurements; **100% agreement**
+  between happy-dom and every real browser for the properties the
+  runtime probe reads.
+- **CLI runner** — `packages/cli/src/runner.ts` now `await`s
+  `verifyComponent(test)` so configs can use `runtime: true`.
+
+### Gates (last verified this session)
+
+- `bun run typecheck` — 5/5 packages, 0 errors.
+- `bun run test` — **437 passing** (core 270, react 110, vitest
+  11, jest 5, cli 41). +30 new in `@prelight/react` for the
+  runtime probe suite.
+- `bun run measure-bundle:strict` — within budget:
+  - `@prelight/core` 23.86 KB min / 8.99 KB gz (24.00 / 9.00)
+  - `@prelight/react` 11.44 KB min / 4.60 KB gz (12.00 / 4.75)
+    — budget raised from 6.50/2.88 in this phase; measured delta
+    +4.94 KB min / +1.72 KB gz is the cost of the probe
+    implementation. `happy-dom` itself is externalised.
+  - `@prelight/vitest` 2.10 KB min / 806 B gz (2.50 / 1.00)
+  - `@prelight/jest` 2.24 KB min / 905 B gz (2.50 / 1.00)
+  - `@prelight/cli` 7.24 KB min / 2.69 KB gz (8.00 / 3.00)
+- `bun run ground-truth:runtime -- --browser all` — **17/17 agree
+  on chromium, webkit, firefox** across all seven runtime-probe
+  properties. One semantic adjustment in `propertyMatches`:
+  width/max-width disagreements where the fixture never declared
+  the property are treated as layout-used drift (browsers report
+  a used width; happy-dom has no layout engine) and ignored; the
+  probe itself filters layout-derived widths via
+  `findAncestorBoxValue`.
+- `bun run ground-truth` (the static cross-engine harness) — not
+  re-run this session; H7 touches no `@prelight/core` code so its
+  floors stand from H6c.
+
+### Two subtleties worth not re-deriving
+
+1. **CSS-in-JS libraries detect their runtime at import time.**
+   If emotion / styled-components load in Node-only mode (no
+   `window`) they commit to SSR-only rendering and won't inject
+   stylesheets on client mount. That's why `resolveStylesRuntime`
+   tries to reuse an existing DOM env (vitest/jest
+   `environment: 'happy-dom'`, a browser test runner) before
+   constructing its own Window. `packages/react/vitest.config.ts`
+   sets `environment: 'happy-dom'` exactly for this reason — so
+   our own test harness has a DOM installed *before* the emotion /
+   styled-components static imports at the top of
+   `runtime-probe.test.tsx` evaluate. Consumers follow the same
+   pattern. Initial runtime-probe test failures showed as
+   "16px Times New Roman" (browser UA default) — that's the
+   telltale that the library initialized SSR-side.
+2. **`max-width` doesn't inherit in CSS.** The runtime probe
+   reads `getComputedStyle()` at the innermost text leaf; if we
+   only read there we miss any `max-width` set on an ancestor
+   (correct per CSS: `max-width` applies to the element it's set
+   on, not descendants). `findAncestorBoxValue` walks up from
+   leaf to container returning the nearest non-default value,
+   mirroring the static walker's "innermost ancestor wins"
+   semantic. Same helper handles `width` with stricter filter
+   (`!= ''`, `!= 'auto'`, not ending in `%`) so auto-layout used
+   widths are ignored.
+
+### Next up: H8 — v0.3.0-rc tagging
+
+H7 was the last substantive phase of v0.3. H8 is the release-
+candidate cut:
+
+1. Commit H7 as a single phase-labelled commit (CHANGELOG Phase
+   H7 block + FINDINGS §H7 + all code/config are already in the
+   tree; one commit covers it).
+2. Fold in the pre-existing v0.2.0-rc doc fixes in a separate
+   commit (`README.md`, `ROADMAP.md` tweaks that have been living
+   in the working tree since H6c's handoff — see H6c block
+   below). They were deferred on purpose to ship with the rc.
+3. Bump `packages/{core,react,jest,vitest,cli}/package.json` to
+   `0.3.0-rc.1`.
+4. Run every gate once more end-to-end:
+   - `bun run typecheck`
+   - `bun run test`
+   - `bun run measure-bundle:strict`
+   - `bun run ground-truth:strict -- --browser all`
+   - `bun run ground-truth:runtime:strict -- --browser all`
+5. `git tag v0.3.0-rc.1`.
+6. Follow-ups for v0.3.0 final (not rc): contributor-facing docs
+   pass, demo update to exercise `runtime: true`, CHANGELOG
+   stabilisation + "Unreleased" → "0.3.0" rename.
+
+### The sharp lesson from this phase (write-up in FINDINGS §H7)
+
+The original H7 scope said "StyleResolver plugins for emotion
+and styled-components." That framing was wrong. Every CSS-in-JS
+library's job is to inject styles the browser will match; once
+the styles are in the DOM, `getComputedStyle()` is the oracle.
+One library-agnostic probe replaces every per-library plugin we
+would otherwise need — and it works for libraries we don't even
+know about yet (Linaria, vanilla-extract, Stitches, Panda,
+Tamagui). The rewrite cost ~45 minutes; the failure modes that
+took longer were the module-load-order issue described above
+and the non-inheriting `max-width` semantics. Both are now
+documented in the runtime-probe source so the next agent doesn't
+re-derive them.
+
+---
+
 ## 2026-04-17 — v0.3 H6c landed; stop before H7 (runtime style probes) — pre-registered cliff phase
 
 **Session transcript:** [v0.3 H6c emoji harness font](70642c52-297d-4419-8e18-3894c42f3a0b)

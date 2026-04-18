@@ -6,6 +6,84 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Phase H7 — v0.3 runtime style probe (2026-04-17)
+
+- **`resolveStylesRuntime()` (new, `packages/react/src/runtime-probe.ts`)** —
+  library-agnostic runtime style resolution. Mounts a React tree
+  into happy-dom (or any pre-installed DOM env), waits for the
+  commit, picks a target (data-prelight-slot for named slots,
+  innermost text leaf otherwise), reads `getComputedStyle(target)`,
+  and walks the ancestor chain for non-inheriting box properties
+  (`max-width`, `width`) to preserve the static walker's "innermost
+  ancestor wins" semantic. The resolver returns the same
+  `{ font, maxWidth, lineHeight, sources, cssVariables }` shape as
+  the static `resolveStyles()`, so downstream `verify()` is unchanged.
+  Works against emotion, styled-components, `@emotion/react`'s css
+  prop, and any library that injects a stylesheet the browser
+  matches via normal CSSOM — we don't bind to any specific CSS-in-JS
+  API. (H7)
+- **`verifyComponent({ runtime: true })`** — new overload threads
+  the runtime probe through the existing verifier. `runtime: false`
+  (default) stays synchronous and unchanged; `runtime: true`
+  returns a `Promise<VerifyResult>`. Explicit `font` / `maxWidth`
+  / `lineHeight` overrides still win over the probed values so
+  consumers can keep a fast path where they already know the
+  typography. (H7)
+- **DOM lifecycle safety** — `installGlobals()` uses
+  `Object.defineProperty` with `configurable: true, writable: true`
+  so Node 21+'s read-only `navigator` getter doesn't blow up the
+  probe. The restore path is always invoked (even on exception)
+  and only deletes keys it actually installed, eliminating the
+  "my next test got a stale DOM" class of flake. When an existing
+  DOM environment is detected (vitest/jest `environment: 'happy-dom'`,
+  a browser test runner), the probe reuses it rather than
+  constructing a fresh window — critical because CSS-in-JS
+  libraries detect their runtime at import time, and a post-import
+  happy-dom leaves them stuck in SSR mode. (H7)
+- **`happy-dom` as optional peer dep** — `packages/react/package.json`
+  now declares `happy-dom: >=15` under `peerDependencies` with
+  `optional: true` in `peerDependenciesMeta`. Consumers who never
+  use `runtime: true` install nothing; consumers who opt in install
+  one peer. `measure-bundle.ts` externalises `happy-dom` and
+  `react-dom/client` so the shipped surface measurement reflects
+  what consumers' bundlers absorb. `bundle-budget.json` raises
+  `@prelight/react` from 6.50 KB → 12.00 KB min (2.88 → 4.75 KB gz);
+  measured delta is +4.94 KB min / +1.72 KB gz. (H7)
+- **Unit coverage: 30 new cases** —
+  `packages/react/test/runtime-probe.test.tsx` covers six
+  categories: plain CSS parity (5), emotion including `ThemeProvider`
+  and the css prop (6), styled-components v6 including `ThemeProvider`,
+  transient props, nested styled, `attrs(...)`, and `css` helper
+  chunks (6), CSS variables + cascade (4), slot-aware resolution (4),
+  and `verifyComponent({ runtime: true })` integration (5). Full
+  `@prelight/react` suite 80/80 → **110/110**. Monorepo 225/225 →
+  **255/255**. (H7)
+- **Ground-truth cross-engine agreement, runtime side** —
+  `ground-truth/runtime-probe-harness.ts` renders 17 fixtures
+  (`ground-truth/runtime-probe-fixtures.ts`) in Chromium, WebKit,
+  and Firefox via Playwright and in happy-dom, and compares
+  `getComputedStyle()` property-by-property. Result: **17/17 agree
+  on all three engines** for every property the runtime probe
+  reads (`font-family`, `font-size`, `font-weight`, `font-style`,
+  `line-height`, `max-width`, `width`). The harness encodes one
+  semantic adjustment: width/max-width disagreements where the
+  fixture never declared the property are treated as layout-used
+  drift (real browsers report a used width for every laid-out
+  element; happy-dom has no layout engine) and ignored — the
+  runtime probe itself correctly filters layout-derived widths via
+  `findAncestorBoxValue`. Invoke via `bun run ground-truth:runtime`
+  or `bun run ground-truth:runtime:strict`. (H7)
+- **CLI runner** — `packages/cli/src/runner.ts` now `await`s
+  `verifyComponent(test)` so configs can opt into `runtime: true`.
+  `await` on a non-promise is a no-op, so the static path pays
+  nothing. (H7)
+- **Docstring reframe** — `extract.ts` and `style-resolver.ts`
+  file-level docs now describe the H7 architecture (static walker
+  + opt-in runtime probe, two resolvers side-by-side, both
+  returning the same `ResolvedStyles` shape) rather than the
+  planned-but-rejected per-library plugin model. See FINDINGS.md
+  §H7 for why library-agnostic beats per-library. (H7)
+
 ### Phase H6c — v0.3 bundled emoji harness font (2026-04-17)
 
 - **`ground-truth/fonts/NotoEmoji-subset.ttf`** — 611 KB

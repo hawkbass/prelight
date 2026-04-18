@@ -20,6 +20,8 @@
     "test": "bun run --filter='./packages/*' test",
     "test:core": "bun run --filter='@prelight/core' test",
     "ground-truth": "bun run --filter='ground-truth' test",
+    "ground-truth:runtime": "bun run --filter='ground-truth' check:runtime",
+    "ground-truth:runtime:strict": "bun run --filter='ground-truth' check:runtime:strict",
     "demos": "bun run --filter='./demos/*' test",
     "measure-bundle": "bun scripts/measure-bundle.ts",
     "measure-bundle:strict": "bun scripts/measure-bundle.ts --strict",

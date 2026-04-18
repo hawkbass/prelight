@@ -7,6 +7,8 @@ export type {
   ResolveStylesOptions,
   StyleSource,
 } from './resolve-styles.js';
+export { resolveStylesRuntime } from './runtime-probe.js';
+export type { ResolveStylesRuntimeOptions } from './runtime-probe.js';
 export {
   extractSlotText,
   findSlots,

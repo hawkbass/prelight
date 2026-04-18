@@ -48,6 +48,14 @@ const TARGETS: Target[] = [
       'react/*',
       'react-dom',
       'react-dom/server',
+      // H7 runtime probe — loaded via dynamic import. `happy-dom`
+      // is an optional peer dep (only installed when consumers
+      // opt into `verifyComponent({ runtime: true })`);
+      // `react-dom/client` is already a required peer. Both must
+      // be external so the shipped surface measurement reflects
+      // what consumers' bundlers actually absorb.
+      'react-dom/client',
+      'happy-dom',
     ],
   },
   {

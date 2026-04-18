@@ -14,10 +14,15 @@
  *     blob. v0.3 H4 added `extractSlotText()` / `findSlots()` /
  *     `resolveStyles({ slot })` for this; see `slots.ts`.
  *
- * PRELIGHT-NEXT(v0.3 H7): emotion + styled-components StyleResolver
- *   plugins. The v0.2 `resolveStyles()` surface already accepts
- *   them; the plugins themselves need a runtime probe and are
- *   tracked as a separate phase.
+ * v0.3 H7 retires the CSS-in-JS marker this file used to carry.
+ * The `PRELIGHT-NEXT(v0.3 H7)` for "emotion + styled-components
+ * StyleResolver plugins" was reframed during the phase: a single
+ * library-agnostic runtime probe (`resolveStylesRuntime`, mounts
+ * into happy-dom and reads `getComputedStyle`) covers every
+ * CSS-in-JS approach that writes into document.head — emotion,
+ * styled-components, vanilla-extract, Stitches, CSS Modules,
+ * plain `<link>` stylesheets — without library-specific plugin
+ * code. See FINDINGS §H7 for the reframe write-up.
  * PRELIGHT-NEXT(v1.0): full style resolution via Presize.
  */
 

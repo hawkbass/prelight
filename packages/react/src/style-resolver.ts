@@ -15,10 +15,15 @@
  * PRELIGHT-INVARIANT: resolvers are pure functions. Same input → same
  * output, no I/O, no access to parent or sibling state.
  *
- * PRELIGHT-NEXT(v0.3): emotion + styled-components resolvers. They
- * require a runtime probe to extract the generated className →
- * CSSRule mapping, which is architecturally different from the
- * static-walk approach here. Tracking separately.
+ * The CSS-in-JS story for v0.3 H7 landed as a separate
+ * `resolveStylesRuntime` entry point (see `runtime-probe.ts`)
+ * rather than as an emotion- / styled-components-specific
+ * StyleResolver plugin here. Mounting into happy-dom and reading
+ * `getComputedStyle` is library-agnostic by construction, so we
+ * don't pay per-library plugin code. The StyleResolver plugin
+ * surface below stays deliberately pure — same-input-same-output,
+ * no DOM access — and covers inline styles + CSS variables; the
+ * runtime probe covers everything else.
  */
 
 import type { ReactElement } from 'react';
