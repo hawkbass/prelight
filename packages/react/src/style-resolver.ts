@@ -157,8 +157,9 @@ export function cssVariables(
  *
  * Explicitly unsupported in v0.2: %, vw, vh, calc(). Those depend
  * on runtime context Prelight doesn't have at static-verify time.
- * PRELIGHT-NEXT(v0.3): resolve vw/vh against a caller-supplied
- * viewport.
+ * PRELIGHT-NEXT(v1.0): resolve vw/vh/%/calc() against Presize's
+ * layout tree. v0.3's runtime probe handles vw/vh implicitly via
+ * `getComputedStyle()`, but the static path still rejects them.
  */
 export function parseLengthPx(
   value: string | number | undefined,

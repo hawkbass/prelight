@@ -13,7 +13,7 @@
  * One file, one set of codes, deterministic output. If a user pipes
  * our stderr into a file, they get plain text — always.
  *
- * PRELIGHT-NEXT(v0.3): add per-level palette overrides via
+ * PRELIGHT-NEXT(v0.4): add per-level palette overrides via
  * `PRELIGHT_COLOR_PASS=green` / `PRELIGHT_COLOR_FAIL=red` env vars for
  * accessibility (deuteranopia/protanopia).
  */
