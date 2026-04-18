@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640" role="img" aria-label="prelight  a layout linter for translated UI">
+  <title>prelight  a layout linter for translated UI. Verified against Chromium, WebKit, and Firefox.</title>
+
+  <!-- Background -->
+  <rect width="1280" height="640" fill="#0a0a0a"/>
+
+  <!-- Subtle grid lines for layout-linter vibe -->
+  <g stroke="#1a1a1a" stroke-width="1">
+    <line x1="0" y1="120" x2="1280" y2="120"/>
+    <line x1="0" y1="520" x2="1280" y2="520"/>
+    <line x1="120" y1="0" x2="120" y2="640"/>
+    <line x1="1160" y1="0" x2="1160" y2="640"/>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="120" y="286"
+        font-family="Inter, 'Inter Tight', 'Helvetica Neue', Arial, system-ui, sans-serif"
+        font-weight="800"
+        font-size="180"
+        letter-spacing="-8"
+        fill="#fafafa">prelight</text>
+
+  <!-- Tagline -->
+  <text x="120" y="372"
+        font-family="Inter, 'Helvetica Neue', Arial, system-ui, sans-serif"
+        font-weight="500"
+        font-size="44"
+        letter-spacing="-1"
+        fill="#fafafa">A layout linter for translated UI.</text>
+
+  <!-- Subtitle -->
+  <text x="120" y="428"
+        font-family="Inter, 'Helvetica Neue', Arial, system-ui, sans-serif"
+        font-weight="400"
+        font-size="32"
+        letter-spacing="-0.5"
+        fill="#999999">Verified against Chromium, WebKit, and Firefox.</text>
+
+  <!-- Bottom-left evidence strip -->
+  <g font-family="ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, Consolas, monospace" font-size="22" fill="#666666">
+    <text x="120" y="560">v0.3.0</text>
+    <text x="230" y="560">·</text>
+    <text x="252" y="560">440 tests</text>
+    <text x="388" y="560">·</text>
+    <text x="410" y="560">928-case corpus</text>
+    <text x="612" y="560">·</text>
+    <text x="634" y="560">98.81% agreement</text>
+  </g>
+
+  <!-- Bottom-right: the pixel marker -->
+  <g font-family="ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, Consolas, monospace" font-size="22" fill="#666666" text-anchor="end">
+    <text x="1160" y="560">de · scale=1 · 93.0px over</text>
+  </g>
+</svg>
