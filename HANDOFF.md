@@ -11,6 +11,416 @@ the work.
 
 ---
 
+## 2026-04-18 — v0.3.0 final tagged; next session = ultrathink code + research review
+
+**Session transcript:** [v0.3.0 final release](70642c52-297d-4419-8e18-3894c42f3a0b)
+
+### Your job, next agent
+
+The user wants a **full code + research review at the ultrathink
+level**. Not a sanity check, not a smell pass — a deep, adversarial
+review of the shipped v0.3 surface, the research claims that back
+it, and the architectural decisions that got us here. Be slow. Be
+specific. Use evidence. Cite files and line numbers. Challenge
+anything that doesn't survive scrutiny.
+
+This is a **review session**. You are not implementing a phase. You
+are interrogating work that is already tagged. If you find a real
+problem, **write it up first**; only propose a fix after the user
+has seen the write-up and agreed the problem is real.
+
+### Where the work lives
+
+**Tag:** `v0.3.0` (annotated), pointing at `70cc689`. Tag is local
+only; no git remote is configured on this repo. The prior rc tag
+`v0.3.0-rc.1` is on `475191e`. Two commits between them, in order:
+
+- `6b2ffa2` HANDOFF rewrite (doc-only; post-rc.1 state)
+- `70cc689` v0.3.0 final — docs pass, emotion demo, CLI validator
+  fix for `runtime: true`
+
+`git diff v0.3.0-rc.1 v0.3.0` is the full delta from rc → final.
+`git log --oneline v0.2.0-rc..v0.3.0` is the full delta of v0.3.
+
+**Package versions at tag time:** all five `@prelight` packages
+on `0.3.0`. None have been published to npm (no publish event
+has happened in this project's history). Cross-package deps are
+`workspace:*`.
+
+**Gates green at tag commit `70cc689`:**
+
+- `bun run typecheck` — 5/5 packages, 0 errors
+- `bun run test` — **440 passing** (core 270, react 110, vitest
+  11, jest 5, cli 44). +3 from rc.1 are the new CLI validator
+  tests in `packages/cli/test/config.test.ts`.
+- `bun run measure-bundle:strict`:
+  - `@prelight/core` 23.86 KB min / 8.99 KB gz (24.00 / 9.00)
+  - `@prelight/react` 11.44 KB min / 4.60 KB gz (12.00 / 4.75)
+  - `@prelight/vitest` 2.10 KB min / 806 B gz (2.50 / 1.00)
+  - `@prelight/jest` 2.24 KB min / 905 B gz (2.50 / 1.00)
+  - `@prelight/cli` 7.25 KB min / 2.70 KB gz (8.00 / 3.00)
+- `bun run ground-truth:strict -- --browser all` — chromium
+  917/928 (98.81%), webkit 919/928 (99.03%), firefox 915/928
+  (98.60%). Emoji 407/408 (99.75%) all three engines. All
+  per-engine per-language floors met.
+- `bun run ground-truth:runtime:strict -- --browser all` — 17/17
+  fixtures agree on chromium, webkit, firefox across all seven
+  runtime-probe properties.
+- `bun --cwd demos/failing-german-button test` — 3/3
+- `bun --cwd demos/runtime-probe-emotion test` — 3/3
+
+Run them all again before you form opinions. These are your
+baseline; any divergence is a finding.
+
+### What shipped in v0.3 (the scope you are reviewing)
+
+v0.3 is eight phases on top of v0.2's structural primitives:
+
+| Phase | Commit | One-line |
+| ----- | ------ | -------- |
+| H1 | `266c38d` | flex-wrap + align-items `start\|end\|center\|stretch` |
+| H2 | `3256742` | block-flow completeness (margin collapse, empty blocks) |
+| H3 | `188c141` | aspect `object-position` + percentage edge insets |
+| H4 | `a65781d` | slot markers (`data-prelight-slot`, multi-slot components) |
+| H5 | `010b554` | flex `align-items: baseline` (row-only, column → `start`) |
+| H6a | `4e90d5b` | `VerifySpec.measurementFonts.cjk` contract surface |
+| H6b | `13280d2` | `VerifySpec.measurementFonts.emoji` contract surface |
+| H6c | `1e872ec` | bundled emoji harness font (NotoEmoji-subset, 611 KB) |
+| H7 | `388430a` | **runtime style probe** (library-agnostic; happy-dom) |
+| H8 | `11531b5` + `70cc689` | rc.1 tag → final tag |
+
+Every phase has a `FINDINGS.md` entry (§H1–§H7/H6c). Every phase
+has a CHANGELOG block. Every phase has tests + ground-truth
+evidence. Read all of it before forming opinions — the project's
+core invariant is **"no public claim without evidence"** and
+that claim graph is auditable.
+
+### Key files to put under the microscope
+
+Code surface (size-ordered, largest first):
+
+- `packages/core/src/verify.ts` — the entry point. Pure function
+  of inputs + bundled font state; the whole library's correctness
+  pivots on this invariant (PRELIGHT-INVARIANT comment at the
+  top).
+- `packages/core/src/layout/flex.ts` — the flex engine. H1 + H5
+  changes make this the largest layout file. Wrap + align-items
+  semantics incl. baseline alignment with ascent threading.
+- `packages/core/src/layout/block.ts` — margin-collapse logic
+  (H2). The subtle one: parent-child and empty-block collapse.
+- `packages/core/src/layout/aspect.ts` — H3. `object-position`
+  and percentage edge insets. Small but easy to get wrong at
+  sub-pixel boundaries.
+- `packages/core/src/shape/cjk.ts` — CJK re-wrap correction, H6a
+  contract. Module-level globals + per-spec override; precedence
+  rules codified.
+- `packages/core/src/shape/emoji.ts` — H6b + H6c. Per-grapheme
+  font switching (emoji family for emoji graphemes, spec's own
+  font for the rest). Mirrors CJK's split deliberately.
+- `packages/core/src/shape/rtl.ts` — RTL corrections including
+  F2 Arabic shim; unchanged in v0.3 but read it to understand
+  the per-engine per-language floor structure.
+- `packages/core/src/types.ts` — `VerifySpec`, `VerifyResult`,
+  `MeasurementFontFamilies`, `Measurement`, `SlotSpec`. Every
+  surface change in v0.3 lands here first.
+- `packages/core/src/predicates.ts` + `report.ts` — predicate
+  dispatch + failure-report shape. Did not churn in v0.3.
+- `packages/react/src/runtime-probe.ts` — **H7 crown jewel.**
+  `resolveStylesRuntime()`. Mount React into happy-dom (or
+  reuse host DOM), read `getComputedStyle()`, walk ancestor
+  chain for non-inheriting `max-width`/`width`. Library-agnostic;
+  replaces what was originally scoped as per-library plugins.
+  Two subtleties documented in-source: (1) CSS-in-JS libs
+  detect their runtime at import time; (2) `max-width` doesn't
+  inherit in CSS, so the probe walks ancestors.
+- `packages/react/src/extract.ts` — static AST walker. H4
+  slot extraction.
+- `packages/react/src/style-resolver.ts` — static style
+  resolution. H4 slot-aware resolution.
+- `packages/react/src/verify-component.ts` — the overload
+  surface that binds `runtime: true` → `resolveStylesRuntime`
+  → `verify`. Async iff `runtime: true`.
+- `packages/react/src/slots.ts` — slot utilities.
+- `packages/cli/src/config.ts` — config validator. Just fixed
+  in v0.3 final to accept `runtime: true` without explicit
+  font/maxWidth/lineHeight. Three new tests pin this.
+- `packages/cli/src/runner.ts` — `await`s `verifyComponent()`
+  so runtime configs work.
+
+Ground-truth surface:
+
+- `ground-truth/harness.ts` — static oracle. Playwright
+  renders the 928-case corpus across three engines; canvas
+  side uses `@napi-rs/canvas` + bundled fonts.
+- `ground-truth/run.ts` — runner with `--browser all`,
+  `--strict`, per-engine per-language floors.
+- `ground-truth/runtime-probe-harness.ts` +
+  `runtime-probe-fixtures.ts` + `runtime-probe-run.ts` —
+  H7 oracle. 17 fixtures × 3 engines × 7 properties = 357
+  measurements. Compares happy-dom's probe output against
+  real-browser `getComputedStyle()`.
+- `ground-truth/fonts/NotoEmoji-subset.ttf` — H6c bundled
+  face (611 KB, monochrome outline from Noto-COLRv1
+  SHA-256-pinned, GSUB-closed). The toolchain writeup is
+  FINDINGS §H6c — read it before you touch this file.
+- `ground-truth/bootstrap.html` — browser-side font
+  registration. Aliases `'Prelight Noto Emoji'` via
+  `@font-face` over the emoji `unicode-range` so the browser
+  resolves emoji through the same face the canvas does.
+
+Research / decisions (the non-code side of the review):
+
+- `FINDINGS.md` — per-phase evidence. Read §H1 through §H7
+  top-to-bottom; the H6c entry is the deepest one (the
+  font-subsetter investigation that took ~3 hours longer
+  than estimated).
+- `DECISIONS.md` — architectural choices. `#008` is the
+  ground-truth harness as release gate (just updated to
+  reflect post-H6c numbers). `#009` is the runtime-probe-
+  as-library-agnostic decision (H7).
+- `CHANGELOG.md` [0.3.0] — user-facing change list.
+- `ROADMAP.md` — v0.3 section at top; v0.4+ scope is
+  deliberately unscoped pending user input.
+- `README.md` — the story we tell on first contact. Updated
+  in v0.3 final: runtime probe example, measurement-fonts
+  contract, post-H6c numbers.
+- `AGENTS.md` — the evidence invariant + project conventions.
+  Read this before anything else.
+
+### Pre-existing quirks the agent should know about
+
+None of these are v0.3 regressions; they pre-date this release.
+But they are legitimate review targets and you should probably
+have an opinion on each.
+
+1. **`prelight.config.tsx` not runnable via Node CLI.** The
+   `@prelight/cli` uses `tsx` (node ESM loader) to import
+   configs. It happily loads `.ts` but chokes on `.tsx`:
+   > TypeError [ERR_UNKNOWN_FILE_EXTENSION]: Unknown file
+   > extension ".tsx"
+   The `demos/failing-german-button/prelight.config.tsx`
+   hits this. Bun's own runtime loads it fine, so
+   `bun --cwd demos/failing-german-button test` (which uses
+   vitest) works; only the bare CLI doesn't. Arguable fix:
+   switch to `tsx/esm` with explicit JSX transform, or
+   pre-register a loader. Not a blocker for v0.3.0 because
+   the vitest matcher path works; it's a CLI UX gap.
+2. **No git remote configured.** `git remote -v` is empty.
+   All three tags (`v0.1.1-rc`, `v0.2.0-rc`, `v0.3.0-rc.1`,
+   `v0.3.0`) are local. No npm publishes have ever happened.
+   The user has explicitly postponed publish across every
+   prior release; don't assume that's changed.
+3. **Monorepo uses Bun workspaces.** `package.json`
+   `workspaces` must list every package and demo directory
+   explicitly. `demos/runtime-probe-emotion` was added this
+   session; earlier demos were already there. If you add a
+   new workspace member you must edit the root manifest.
+4. **`happy-dom` is a peerDep of `@prelight/react`, marked
+   optional.** Consumers who never use `runtime: true` install
+   nothing. Consumers who do must explicitly add `happy-dom`.
+   The runtime probe's first action is a clear error message
+   if `happy-dom` is absent and no DOM env is already set up.
+5. **The ground-truth harness reports agreement, not
+   correctness.** It checks whether Prelight's `verify()`
+   output matches what real browsers + the bundled canvas
+   measure. If every engine and Prelight all agree on a
+   wrong value, the harness says "pass". This is a known
+   limitation with no current fix; see AGENTS.md evidence
+   invariant discussion.
+6. **Emoji presentation-selector cascade residual.** 1/408
+   emoji cases disagree per engine (`⚠️`, `☀️`, etc. with
+   `U+FE0F` default text presentation). Engine-specific
+   cascade behavior, not a Prelight bug. Deferred
+   indefinitely in FINDINGS §H6c.
+7. **Auto-resolved flex baseline needs ascent.** H5 row
+   alignment wants first-baseline offsets per item. The
+   `Measurement` shape threads `fontAscent`/`fontDescent` as
+   optional. Where they're missing, the baseline correction
+   falls back gracefully. Documented in
+   `packages/core/src/layout/flex.ts` near the baseline code.
+
+### Stress-test angles the user specifically wants prosecuted
+
+Approach this as a reviewer whose job is to surface problems the
+implementation agent missed. Concrete angles, any of which can
+produce a real finding:
+
+1. **Library-agnostic runtime probe claim.** H7 claims the probe
+   works for emotion, styled-components, plain CSS, and "any
+   library that injects stylesheets the browser matches." The
+   actual unit-test matrix is emotion + styled-components + CSS
+   variables + slots. Linaria, vanilla-extract, Stitches, Panda,
+   Tamagui are listed in FINDINGS as "also work" without direct
+   evidence. **Is that claim defensible, or is it marketing?**
+   At minimum, stand up a vanilla-extract fixture and see if it
+   passes. If it doesn't, that's a real finding that the README
+   claim needs narrowing.
+2. **`@prelight/react` bundle jump 6.14 → 11.44 KB.** H7 nearly
+   doubles the react package's min size. The budget was bumped
+   deliberately (FINDINGS §H7) but that's still a big user-side
+   cost. Is any of that size accidental? Audit
+   `packages/react/dist/index.js` and see whether happy-dom
+   types or probe-only paths are leaking into the SSR-friendly
+   static path that consumers pay for whether they use
+   `runtime: true` or not.
+3. **`correctEmojiLayout` per-grapheme split.** H6b + H6c move
+   emoji correction to a per-grapheme basis (emoji family for
+   emoji graphemes, spec font for Latin, CJK family for CJK
+   runs). Verify the three paths compose correctly for
+   **mixed-script text** like `Hello 👋 你好 مرحبا` (Latin +
+   emoji + CJK + RTL). The unit tests cover isolated runs; is
+   there a mixed-run case where grapheme-boundary resolution
+   is ambiguous?
+4. **Ground-truth floors vs measured gap.** Per-engine overall:
+   chromium 98.81% / 98% floor, webkit 99.03% / 98% floor,
+   firefox 98.60% / 98% floor (for emoji; per-language floors
+   are higher for some). The gap between measured and floor is
+   the safety margin. Is that margin honest? Re-run
+   `ground-truth:strict` with `--browser all` three times
+   in a row and see if the measured number is stable to the
+   last case. If it flaps, the floor is under-designed.
+5. **`verifyComponent({ runtime: true })` race conditions.**
+   The runtime path mounts React, waits a tick, reads styles,
+   unmounts. What happens if the component does async work on
+   mount (e.g., an effect that fetches)? What if it throws
+   during render? What if it contains a portal? No test covers
+   any of these; they're legitimate edge cases for a runtime
+   probe to hit in the wild.
+6. **CJK measurementFonts precedence edge cases.** H6a defines
+   per-call > global > spec font. What if per-call is an
+   empty array and global is also set? Today: per-call empty
+   array is the explicit opt-out signal (see FINDINGS §H6a).
+   Is that documented where a user will find it? Is the
+   behavior tested at all three levels?
+7. **Slot path resolution ambiguity.** H4 adds
+   `data-prelight-slot` with `resolveStyles({ slot: 'title' })`.
+   What if two subtrees both contain a `title` slot? Today
+   the walker returns the first match in document order;
+   the docs don't say that explicitly. Is that deterministic
+   across emotion + styled-components once they've injected
+   classes? Write a runtime-probe test that proves it.
+8. **Font subsetter toolchain fragility.** FINDINGS §H6c
+   documents that `subset-font` strips `CBDT`/`CBLC`/`COLR`/
+   `CPAL` via `fontverter` regardless of `targetFormat`, and
+   `harfbuzzjs@0.10.3` is compiled `-DHB_TINY`. The shipped
+   `NotoEmoji-subset.ttf` is locked to a specific source
+   font SHA-256. If we ever upgrade the source, do we have a
+   reproducible build recipe? `scripts/subset-emoji-font.ts`
+   is present; read it alongside FINDINGS §H6c and decide
+   whether a new hire could reproduce the subset in under an
+   hour from the repo alone. If the script and the prose
+   disagree in any material way, that's a finding.
+9. **The CLI `runtime: true` fix itself.** `packages/cli/src/config.ts`
+   now accepts `runtime: true` without explicit font/maxWidth/
+   lineHeight. The validation logic has two gates
+   (`autoResolve` OR `runtime`) bypassing the typography
+   checks. What happens if a consumer sets BOTH `runtime: true`
+   AND explicit `font`? Is that tested? Is the documented
+   precedence (explicit > resolved) actually enforced in
+   `verifyComponent`?
+10. **Evidence invariant itself.** AGENTS.md says "no public
+    claim without evidence". v0.3's public surface includes
+    the claim "CSS-in-JS support via happy-dom runtime probe."
+    Does every claim in README.md trace to a test, a
+    ground-truth fixture, or a documented experiment?
+    Walk README.md section by section and grade each claim
+    for evidence backing.
+
+### The research questions the user will also want answered
+
+The user used the phrase "code + research review". This project
+sits on top of `@chenglou/pretext` and makes specific claims
+about how Prelight relates to existing typography layout work.
+A full review should also interrogate:
+
+1. **Is the claim "first library to verify component layout
+   against multiple browser engines" defensible?** Specifically
+   look at: `@vercel/og`, `playwright-visual-regression`,
+   `happo.io`, `percy`, `chromatic`, `storybook-test-runner`.
+   Are any of these doing substantially the same thing? What
+   does Prelight actually do that they don't? The project
+   README is light on positioning claims; that's either
+   intentional humility or a missed opportunity.
+2. **What's the relationship to CSS Houdini / Layout API?**
+   The CSS Houdini Layout API was supposed to enable
+   user-side custom layout. It stalled in standards track.
+   Is Prelight effectively a userland-implemented Layout API
+   for the subset of CSS it supports? If yes, that's a
+   framing worth making explicit.
+3. **What precedent is there for "verification before
+   snapshot"?** Snapshot testing (Jest snapshots, Storybook
+   Chromatic) is the dominant paradigm for UI regression.
+   Prelight is not snapshot testing — it is algorithmic
+   verification of a declared contract (max width, line
+   height, no overflow). Is there prior art for this? (The
+   user knows of none. A reviewer who finds some would be
+   doing the project a real service.)
+4. **How defensible is the 928-case corpus?** The corpus
+   covers ten languages × different difficulty tiers. Is
+   the sample size statistically meaningful? What
+   confidence interval does 98.81% agreement across 928
+   cases actually give you? Is the floor of 93% per-engine
+   derived from data or from a hand-picked safety margin?
+
+### Where to write your findings
+
+The user does not want another HANDOFF block from you (unless
+you ship code changes). They want a review artifact. The
+natural home is a new `REVIEW-v0.3.0.md` at repo root,
+structured as:
+
+- One-paragraph executive summary (what's real, what's
+  fragile, what's marketing).
+- Code findings by severity (critical / important / minor),
+  each with a file:line citation and a specific repro.
+- Research findings: positioning, prior art, statistical
+  claims.
+- Recommendations for v0.4 (without scoping v0.4).
+
+If you do decide to also write a HANDOFF block, make it a
+**session summary**, not a phase landing block. Different
+voice; different purpose.
+
+### What NOT to do
+
+- Do NOT land code fixes as part of the review session
+  unless the user explicitly OKs each one. Reviews that
+  silently become refactors lose credibility.
+- Do NOT touch the bundled emoji font or its subsetting
+  toolchain unless you are ready to re-run the full
+  ground-truth suite and re-SHA-256-pin the source.
+- Do NOT assume gates pass because they passed at tag time.
+  Run them yourself.
+- Do NOT skim FINDINGS.md. That doc is the evidence-invariant
+  enforcement mechanism; reading it superficially defeats the
+  review.
+- Do NOT push the tag. Do NOT publish to npm. User decides.
+
+### First steps (a fresh agent should do these in order)
+
+1. `git log --oneline v0.2.0-rc..v0.3.0` — see the full
+   phase history.
+2. `git show v0.3.0` — read the tag message.
+3. Read `AGENTS.md` — the evidence invariant + conventions.
+4. Read `README.md` — the public surface.
+5. Read `FINDINGS.md` top to bottom through §H7.
+6. Read `DECISIONS.md` top to bottom.
+7. Run every gate, confirm green:
+   - `bun run typecheck`
+   - `bun run test`
+   - `bun run measure-bundle:strict`
+   - `bun run ground-truth:strict -- --browser all`
+   - `bun run ground-truth:runtime:strict -- --browser all`
+   - `bun --cwd demos/failing-german-button test`
+   - `bun --cwd demos/runtime-probe-emotion test`
+8. Only after all of the above is green, start picking
+   review angles. Prioritise findings that challenge a
+   public claim — those are the ones with highest leverage.
+
+Good hunting.
+
+---
+
 ## 2026-04-18 — v0.3 H8 landed: v0.3.0-rc.1 tagged; v0.3 scope complete
 
 **Session transcript:** [v0.3 H8 rc.1 tagging](70642c52-297d-4419-8e18-3894c42f3a0b)
