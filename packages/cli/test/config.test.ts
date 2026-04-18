@@ -189,4 +189,86 @@ describe('loadConfig', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  test('accepts autoResolve: true without explicit font/maxWidth/lineHeight', async () => {
+    const dir = tmp();
+    try {
+      const file = join(dir, 'prelight.config.mjs');
+      writeFileSync(
+        file,
+        `export default {
+  tests: [
+    {
+      name: 'Auto Save',
+      element: () => null,
+      autoResolve: true,
+      constraints: { maxLines: 1 },
+    },
+  ],
+}`,
+      );
+      const cfg = await loadConfig(file);
+      expect(cfg.tests![0]!.autoResolve).toBe(true);
+      expect(cfg.tests![0]!.font).toBeUndefined();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('accepts runtime: true without explicit font/maxWidth/lineHeight (v0.3 H7)', async () => {
+    // Regression: the runtime probe populates font/maxWidth/lineHeight
+    // by construction (it reads `getComputedStyle()` on the mounted
+    // target), so forcing the consumer to also declare them explicitly
+    // is both redundant and misleading — they'd become a second source
+    // of truth for the typography the probe already discovered. This
+    // test pins the validator's "either path auto-populates" rule.
+    const dir = tmp();
+    try {
+      const file = join(dir, 'prelight.config.mjs');
+      writeFileSync(
+        file,
+        `export default {
+  tests: [
+    {
+      name: 'Runtime Save',
+      element: () => null,
+      runtime: true,
+      constraints: { maxLines: 1 },
+    },
+  ],
+}`,
+      );
+      const cfg = await loadConfig(file);
+      expect(cfg.tests![0]!.runtime).toBe(true);
+      expect(cfg.tests![0]!.font).toBeUndefined();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('still rejects tests that opt into neither autoResolve nor runtime and omit font', async () => {
+    const dir = tmp();
+    try {
+      const file = join(dir, 'prelight.config.mjs');
+      writeFileSync(
+        file,
+        `export default {
+  tests: [
+    {
+      name: 'Missing font',
+      element: () => null,
+      maxWidth: 120,
+      lineHeight: 20,
+      constraints: { maxLines: 1 },
+    },
+  ],
+}`,
+      );
+      await expect(loadConfig(file)).rejects.toThrow(
+        /font must be a CSS font shorthand string/,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

@@ -4,7 +4,49 @@ All notable changes to Prelight are documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] — 2026-04-18
+
+### v0.3.0 final — contributor-facing polish (2026-04-18)
+
+- **README docs pass.** Status header updated to "v0.3.0 released".
+  "What v0.3 does" section expanded: H7 runtime probe added as a
+  first-class bullet next to the static walker, H4 multi-slot
+  support called out, H5 flex baseline alignment and H3
+  `object-position` / percentage edge insets attributed to their
+  v0.3 phases, and `measurementFonts` contract described with
+  the bundled `NotoEmoji-subset.ttf`. A new "Any CSS-in-JS
+  library (v0.3)" example shows the emotion + `runtime: true`
+  pattern the failing-german-button demo already exercises. The
+  ground-truth agreement line moved from the pre-H6c numbers
+  (94.5 / 94.7 / 94.3) to the shipped post-H6c numbers (98.81 /
+  99.03 / 98.60) with emoji at 99.75% on all three engines,
+  citing FINDINGS §H6c as the receipt. Duplicate `Measurement`
+  helper introduced during H8's doc-fix commit removed.
+- **CLI validator: `runtime: true` no longer forces
+  `autoResolve: true`.** `packages/cli/src/config.ts` treated
+  `runtime: true` as a non-populating spec and insisted on
+  explicit `font` / `maxWidth` / `lineHeight`, which contradicts
+  H7's design — the runtime probe populates those three by
+  reading `getComputedStyle()`, and forcing the consumer to also
+  declare them would make the config a second source of truth
+  for the typography the probe already discovered. Validator
+  now treats either `autoResolve: true` or `runtime: true` as
+  style-populating; explicit values still win when present.
+  Three new regression tests in `packages/cli/test/config.test.ts`
+  pin the accept/reject semantics (autoResolve-accepts,
+  runtime-accepts, neither-still-rejects).
+- **New demo: `demos/runtime-probe-emotion`.** The failing-
+  german-button scenario restaged against an `@emotion/styled`
+  button so the static walker can't see the typography. Three
+  vitest cases — "Save" passes, "Confirm" passes, the
+  39-character insurance compound fails in German — all driven
+  by `verifyComponent({ runtime: true })` with no explicit
+  `font` / `maxWidth` / `lineHeight`. `vitest.config.ts` sets
+  `environment: 'happy-dom'` so emotion detects the client
+  runtime at import time and injects into the same DOM the
+  probe reads from; the README explains why vitest, not the
+  CLI, is the recommended driver for CSS-in-JS demos. Added
+  to the monorepo workspaces list so `bun run demos` covers it.
 
 ### Phase H7 — v0.3 runtime style probe (2026-04-17)
 

@@ -133,7 +133,13 @@ function validateTest(test: PrelightTest, index: number, path: string): void {
   if (!test.name || typeof test.name !== 'string') {
     throw new Error(`${path}:${loc}.name must be a non-empty string.`);
   }
-  if (test.autoResolve !== true) {
+  // `autoResolve: true` walks the static React tree; `runtime: true`
+  // mounts into happy-dom and reads `getComputedStyle()` (v0.3 H7).
+  // Either path populates font/maxWidth/lineHeight from the
+  // component itself, so explicit values become optional. Explicit
+  // values always win if present — see `verifyComponent` overloads.
+  const autoPopulates = test.autoResolve === true || test.runtime === true;
+  if (!autoPopulates) {
     if (typeof test.font !== 'string') {
       throw new Error(`${path}:${loc}.font must be a CSS font shorthand string.`);
     }

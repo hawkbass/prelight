@@ -9,6 +9,7 @@
     "packages/*",
     "demos/failing-german-button",
     "demos/dogfood-library",
+    "demos/runtime-probe-emotion",
     "demos/speed-comparison",
     "ground-truth",
     "site",

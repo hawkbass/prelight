@@ -46,6 +46,25 @@
         "vitest": "^2.1.0",
       },
     },
+    "demos/runtime-probe-emotion": {
+      "name": "demo-runtime-probe-emotion",
+      "version": "0.0.0",
+      "dependencies": {
+        "@emotion/react": "^11",
+        "@emotion/styled": "^11",
+        "@prelight/core": "workspace:*",
+        "@prelight/react": "workspace:*",
+        "@prelight/vitest": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/react": "^18.3.0",
+        "happy-dom": "^15",
+        "react": "^18.3.0",
+        "react-dom": "^18.3.0",
+        "typescript": "^5.7.0",
+        "vitest": "^2.1.0",
+      },
+    },
     "demos/speed-comparison": {
       "name": "demo-speed-comparison",
       "version": "0.0.0",
@@ -74,7 +93,7 @@
     },
     "packages/cli": {
       "name": "@prelight/cli",
-      "version": "0.0.0",
+      "version": "0.3.0-rc.1",
       "bin": {
         "prelight": "./dist/cli.js",
       },
@@ -90,7 +109,7 @@
     },
     "packages/core": {
       "name": "@prelight/core",
-      "version": "0.0.0",
+      "version": "0.3.0-rc.1",
       "dependencies": {
         "@chenglou/pretext": "^0.0.3",
         "@napi-rs/canvas": "^0.1.62",
@@ -102,7 +121,7 @@
     },
     "packages/jest": {
       "name": "@prelight/jest",
-      "version": "0.0.0",
+      "version": "0.3.0-rc.1",
       "dependencies": {
         "@prelight/core": "workspace:*",
       },
@@ -117,7 +136,7 @@
     },
     "packages/react": {
       "name": "@prelight/react",
-      "version": "0.0.0",
+      "version": "0.3.0-rc.1",
       "dependencies": {
         "@prelight/core": "workspace:*",
       },
@@ -144,7 +163,7 @@
     },
     "packages/vitest": {
       "name": "@prelight/vitest",
-      "version": "0.0.0",
+      "version": "0.3.0-rc.1",
       "dependencies": {
         "@prelight/core": "workspace:*",
       },
@@ -600,6 +619,8 @@
     "demo-dogfood-library": ["demo-dogfood-library@workspace:demos/dogfood-library"],
 
     "demo-failing-german-button": ["demo-failing-german-button@workspace:demos/failing-german-button"],
+
+    "demo-runtime-probe-emotion": ["demo-runtime-probe-emotion@workspace:demos/runtime-probe-emotion"],
 
     "demo-speed-comparison": ["demo-speed-comparison@workspace:demos/speed-comparison"],
 

@@ -117,7 +117,7 @@ and publish the per-engine × per-language agreement numbers in
 `FINDINGS.md`. v0.1.x ships with the following floors, calibrated ~1-2
 points below measured:
 
-### Chromium (measured 94.50% on 928-case corpus, floor 93%)
+### Chromium (measured 98.81% on 928-case corpus post-H6c, floor 93%)
 
 | Language        | Floor | Measured (2026-04-16 F6) | Rationale                                    |
 | --------------- | ----- | ------------------------ | -------------------------------------------- |
@@ -129,7 +129,7 @@ points below measured:
 | ja              | 93%   | 95.5% (84/88)            | F3 CJK shim + Noto Sans JP subset in harness |
 | ar              | 95%   | 97.9% (94/96)            | F2 RTL correction shim + Noto Sans Arabic    |
 
-### WebKit (measured 94.72% on 928-case corpus, floor 93%)
+### WebKit (measured 99.03% on 928-case corpus post-H6c, floor 93%)
 
 | Language        | Floor | Measured (2026-04-16 F6) | Rationale                                     |
 | --------------- | ----- | ------------------------ | --------------------------------------------- |
@@ -141,7 +141,7 @@ points below measured:
 | ja              | 95%   | 97.7% (86/88)            | Best engine on kinsoku — matches shim output  |
 | ar              | 95%   | 97.9%                    | Identical to Chromium after F2 RTL correction |
 
-### Firefox (measured 94.29% on 928-case corpus, floor 93%)
+### Firefox (measured 98.60% on 928-case corpus post-H6c, floor 93%)
 
 | Language        | Floor | Measured (2026-04-16 F6) | Rationale                                                |
 | --------------- | ----- | ------------------------ | -------------------------------------------------------- |
@@ -154,7 +154,9 @@ points below measured:
 | ar              | 95%   | 97.9%                    | Matches Chromium/WebKit after F2 RTL correction          |
 
 Overall floor: **93%** per engine. Post-H6c measured overall sits at
-98.28% chromium / 99.03% webkit / 98.60% firefox on the 928-case corpus.
+98.81% chromium / 99.03% webkit / 98.60% firefox on the 928-case corpus
+(917 / 919 / 915 of 928 cases agree; see FINDINGS §H6c for the delta
+table).
 
 Any regression below a per-engine per-language floor blocks release.
 

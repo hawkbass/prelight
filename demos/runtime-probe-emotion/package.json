@@ -1,0 +1,26 @@
+{
+  "name": "demo-runtime-probe-emotion",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The v0.3 H7 runtime probe against emotion. Same Berlin-overflow story as failing-german-button, but styled via @emotion/styled so the static walker can't see the typography — verifyComponent({ runtime: true }) mounts into happy-dom and reads the injected CSS.",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@emotion/react": "^11",
+    "@emotion/styled": "^11",
+    "@prelight/core": "workspace:*",
+    "@prelight/react": "workspace:*",
+    "@prelight/vitest": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "happy-dom": "^15",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  }
+}
