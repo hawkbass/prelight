@@ -44,11 +44,14 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Typecheck
-        run: bun run --filter='./packages/*' typecheck
-
+      # Build before typecheck: consumer packages resolve @prelight/core
+      # types from ./dist/index.d.ts, so dist/ must exist before
+      # typecheck runs. Same ordering as ground-truth.yml.
       - name: Build
         run: bun run --filter='./packages/*' build
+
+      - name: Typecheck
+        run: bun run --filter='./packages/*' typecheck
 
       - name: Test (all packages)
         run: bun run --filter='./packages/*' test
