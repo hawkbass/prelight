@@ -11,6 +11,95 @@ the work.
 
 ---
 
+## 2026-04-18 — v0.3 H8 landed: v0.3.0-rc.1 tagged; v0.3 scope complete
+
+**Session transcript:** [v0.3 H8 rc.1 tagging](70642c52-297d-4419-8e18-3894c42f3a0b)
+
+### State (fully committed, tag pushed locally)
+
+H8 lands on top of H7 (`388430a`). Four commits on master since
+the H7-landed handoff, in order:
+
+- `388430a` — `v0.3 H7: runtime style probe for CSS-in-JS`
+- `1eea8b5` — `docs: README Measurement example + ROADMAP v0.2 status`
+  (the pre-existing doc fixes deferred through H6c, landed as a
+  separate commit per the H7 HANDOFF plan)
+- `11531b5` — `v0.3 H8: bump packages to 0.3.0-rc.1` (this also
+  fixes two latent bugs in the root `package.json` script wiring,
+  see "Latent fixes" below)
+- Tag: `v0.3.0-rc.1` (annotated) — points at `11531b5`
+
+All five packages now carry `version: "0.3.0-rc.1"`. Cross-package
+deps stay on `workspace:*`, so no dep-version updates were needed.
+
+### Latent fixes folded into the rc.1 commit
+
+Two bugs in `package.json` masked by direct `cd ground-truth && bun
+run check:*` invocations. Fixing them is appropriate here because
+without them the gate commands documented in the HANDOFF history
+wouldn't actually run:
+
+1. `bun run ground-truth` used to filter for a `test` script that
+   doesn't exist on the `ground-truth` workspace (it has `check`);
+   every run bailed with "No packages matched the filter". Now
+   routes to `check`.
+2. Added `ground-truth:strict` root script so the cross-engine
+   strict sweep can be invoked as written from monorepo root.
+
+### Gates (end-to-end at tag commit `11531b5`)
+
+- `bun run typecheck` — 5/5 packages, 0 errors.
+- `bun run test` — **437 passing** (core 270, react 110, vitest
+  11, jest 5, cli 41). No delta vs H7 — H8 is packaging only.
+- `bun run measure-bundle:strict` — within budget:
+  - `@prelight/core` 23.86 KB min / 8.99 KB gz (24.00 / 9.00)
+  - `@prelight/react` 11.44 KB min / 4.60 KB gz (12.00 / 4.75)
+  - `@prelight/vitest` 2.10 KB min / 806 B gz (2.50 / 1.00)
+  - `@prelight/jest` 2.24 KB min / 905 B gz (2.50 / 1.00)
+  - `@prelight/cli` 7.24 KB min / 2.69 KB gz (8.00 / 3.00)
+- `bun run ground-truth:strict -- --browser all` — all per-engine
+  per-language floors met, exit 0:
+  - chromium 917/928 (98.81%)
+  - webkit   919/928 (99.03%)
+  - firefox  915/928 (98.60%)
+  — bit-for-bit identical to the H6c floors.
+- `bun run ground-truth:runtime:strict -- --browser all` — 100%
+  agreement for the runtime probe on every browser (17/17 ×3).
+
+### Next up: v0.3.0 final
+
+The rc.1 is intentionally minimal — packaging + gates, no new
+features, no demo churn. Items explicitly deferred to the final
+v0.3.0 cut:
+
+1. Contributor-facing docs pass. The new `runtime: true` flag
+   isn't yet in README; FINDINGS §H7 has the design rationale but
+   the user-facing API story is still one README edit short.
+2. Demo update: at least one demo exercising
+   `verifyComponent({ runtime: true })` against an
+   emotion/styled-components component. Verifies the happy path
+   for consumers who pull the package unmodified.
+3. `CHANGELOG.md`: `[Unreleased]` heading → `[0.3.0] — <date>`,
+   move the H7/H8 blocks under it.
+4. Bump all five packages `0.3.0-rc.1` → `0.3.0`.
+5. Tag `v0.3.0`.
+6. (Optional, not a blocker) Decide on and document the npm
+   publish flow — currently none of the packages have ever been
+   published to npm, so the first `v0.3.0` tag is also the first
+   publish event.
+
+None of these are risky. An agent picking this up should be able
+to ship v0.3.0 in a single session.
+
+### Reminder on scope
+
+If v0.3.0 final ships cleanly, v0.4 is wide open. The FINDINGS
+doc catalogues the rough candidate list from prior scoping
+sessions (grid, positioning, transforms, flex-wrap, CSS
+`calc()`, container queries). No decision has been made.
+
+---
+
 ## 2026-04-17 — v0.3 H7 landed (runtime style probe); next up H8 (v0.3.0-rc tagging)
 
 **Session transcript:** [v0.3 H7 runtime probe](70642c52-297d-4419-8e18-3894c42f3a0b)
