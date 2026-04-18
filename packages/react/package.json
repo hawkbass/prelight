@@ -1,6 +1,6 @@
 {
   "name": "@prelight/react",
-  "version": "0.0.0",
+  "version": "0.3.0-rc.1",
   "description": "React adapter for Prelight. Extracts text + style + width from rendered components and delegates to @prelight/core.",
   "license": "MIT",
   "type": "module",

@@ -1,6 +1,6 @@
 {
   "name": "@prelight/jest",
-  "version": "0.0.0",
+  "version": "0.3.0-rc.1",
   "description": "Jest matcher for Prelight. expect(...).toLayout({ ... }).",
   "license": "MIT",
   "type": "module",

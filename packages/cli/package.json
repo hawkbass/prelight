@@ -1,6 +1,6 @@
 {
   "name": "@prelight/cli",
-  "version": "0.0.0",
+  "version": "0.3.0-rc.1",
   "description": "Config-driven CLI for Prelight. `prelight` runs your layout verification matrix in CI.",
   "license": "MIT",
   "type": "module",
