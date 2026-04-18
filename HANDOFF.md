@@ -15,10 +15,9 @@ the work.
 
 **Session transcript:** [v0.3 H8 rc.1 tagging](70642c52-297d-4419-8e18-3894c42f3a0b)
 
-### State (fully committed, tag pushed locally)
+### State (fully committed, tag placed locally)
 
-H8 lands on top of H7 (`388430a`). Four commits on master since
-the H7-landed handoff, in order:
+H8 lands on top of H7 (`388430a`). Commits in order:
 
 - `388430a` — `v0.3 H7: runtime style probe for CSS-in-JS`
 - `1eea8b5` — `docs: README Measurement example + ROADMAP v0.2 status`
@@ -27,7 +26,20 @@ the H7-landed handoff, in order:
 - `11531b5` — `v0.3 H8: bump packages to 0.3.0-rc.1` (this also
   fixes two latent bugs in the root `package.json` script wiring,
   see "Latent fixes" below)
-- Tag: `v0.3.0-rc.1` (annotated) — points at `11531b5`
+- `475191e` — `docs: ROADMAP v0.3 section + reschedule stale
+  PRELIGHT-NEXT markers`. Surfaced by the completion review on
+  the rc.1 tree: ROADMAP had no v0.3 section + three stale
+  `PRELIGHT-NEXT(v0.3)` markers for items that didn't make rc.1
+  (colour palette overrides, CJS jest entry, static vw/vh).
+  Markers rescheduled to their actual target versions (v0.4 /
+  v1.0), ROADMAP deferred-scope table updated to match. Docs +
+  comments only, 0 behaviour delta, gates re-verified.
+- Tag: `v0.3.0-rc.1` (annotated), pointing at `475191e` so the
+  shipped doc set matches the code. Tag only exists locally (no
+  remote configured) — moving the tag forward after discovering
+  the ROADMAP gap was safe. Any commits after `475191e`
+  (including this HANDOFF revision) are **post-rc.1** and will
+  either roll into v0.3.0 final or land on master past the tag.
 
 All five packages now carry `version: "0.3.0-rc.1"`. Cross-package
 deps stay on `workspace:*`, so no dep-version updates were needed.
