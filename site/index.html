@@ -3,16 +3,18 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Prelight — verify your UI before the browser runs it</title>
+    <title>prelight — a layout linter for translated UI</title>
     <meta
       name="description"
-      content="Prelight is a static text-layout verifier. It catches German overflows, Arabic wrapping bugs, and dynamic-type-scale failures in milliseconds, without a browser."
+      content="A layout linter for translated UI. Catches German-button overflow, Arabic wrapping, and scale-cascade failures before CI — without a browser. Verified against Chromium, WebKit, and Firefox on a 928-case multilingual corpus."
     />
-    <meta property="og:title" content="Prelight" />
+    <meta property="og:title" content="prelight" />
     <meta
       property="og:description"
-      content="Static text-layout verification. Catches overflow bugs in milliseconds, not minutes."
+      content="A layout linter for translated UI. Verified against Chromium, WebKit, and Firefox."
     />
+    <meta property="og:image" content="../brand/social-preview.png" />
+    <meta name="twitter:card" content="summary_large_image" />
     <style>
       :root {
         --fg: #111;
@@ -52,13 +54,13 @@
         padding: 64px 24px 96px;
       }
       h1 {
-        font-size: 2.75rem;
-        letter-spacing: -0.025em;
-        line-height: 1.1;
-        margin: 0 0 12px;
-      }
-      h1 .dot {
-        color: var(--accent);
+        font-family:
+          Inter, "Inter Tight", "Helvetica Neue", Arial, system-ui, sans-serif;
+        font-size: 3.25rem;
+        font-weight: 800;
+        letter-spacing: -0.04em;
+        line-height: 1;
+        margin: 0 0 16px;
       }
       h2 {
         font-size: 1.4rem;
@@ -147,24 +149,24 @@
   </head>
   <body>
     <main>
-      <h1>Prelight<span class="dot">.</span></h1>
+      <h1>prelight</h1>
       <p class="tagline">
-        Verify your UI before the browser runs it. Static text-layout checks that
-        catch the bugs you only notice in German.
+        A layout linter for translated UI. Verified against Chromium, WebKit,
+        and Firefox.
       </p>
 
       <div class="stats">
         <div class="stat">
+          <div class="n">98.81%</div>
+          <div class="l">cross-engine agreement, 928-case corpus</div>
+        </div>
+        <div class="stat">
           <div class="n">0.024<span class="l">ms/cell</span></div>
-          <div class="l">measured, 50-run mean</div>
+          <div class="l">warm-path mean, 50-run</div>
         </div>
         <div class="stat">
           <div class="n">23×</div>
           <div class="l">faster than Playwright</div>
-        </div>
-        <div class="stat">
-          <div class="n">97.9%<span class="l">+</span></div>
-          <div class="l">non-emoji corpus agreement, Chromium + WebKit + Firefox</div>
         </div>
       </div>
 
@@ -321,16 +323,25 @@ End-to-end, including Chromium launch, Prelight finishes 20× faster.</code></pr
       </p>
       <p>
         We bundle Inter Variable v4.1 so measurements are deterministic across
-        machines. Against real Chromium, WebKit, and Firefox on a 928-case
-        multilingual corpus (7 languages + a 51-string emoji stress set) we
-        currently agree <strong>94.5% / 94.7% / 94.3%</strong> overall —
-        <strong>≥ 97.9% on every non-emoji cell</strong>, every language and
-        script above 95%. Emoji sits at 90% on all three engines; the gap is
-        font-fallback variance (Inter has no emoji glyphs), documented in
-        <a href="https://github.com/prelight/prelight/blob/main/FINDINGS.md">FINDINGS.md §F6</a>,
-        not a layout bug. Every disagreement is counted in
+        machines, plus a <strong>611 KB NotoEmoji-subset.ttf</strong>
+        (GSUB-closed, monochrome outline from Noto-COLRv1) so emoji
+        measurement works out of the box. Against real Chromium, WebKit, and
+        Firefox on a 928-case multilingual corpus (7 languages + a 51-string
+        ZWJ/skin-tone/flag stress set) we agree
+        <strong>98.81% / 99.03% / 98.60%</strong> overall.
+        <strong>Emoji reaches 99.75% on all three engines</strong> after v0.3
+        H6c shipped the bundled font and per-grapheme
+        <code>correctEmojiLayout</code>. Every disagreement is counted in
         <a href="https://github.com/prelight/prelight/blob/main/FINDINGS.md">FINDINGS.md</a>
         and gated with per-engine × per-language floors in CI.
+      </p>
+      <p>
+        We also publish our own adversarial review:
+        <a href="https://github.com/prelight/prelight/blob/main/REVIEW-v0.3.0.md">REVIEW-v0.3.0.md</a>.
+        One critical finding, five important, three discussion items —
+        documented against the library's own
+        <em>"no public claim without evidence"</em> invariant. Worth a read
+        before dropping prelight into a CI path.
       </p>
 
       <h2>Predicates</h2>
