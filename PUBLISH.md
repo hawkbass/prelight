@@ -188,13 +188,28 @@ this list before pushing:
 | Location | Claim | Truth (v0.3) |
 | --- | --- | --- |
 | `.stats .stat` block | `0.024 ms/cell` | Still roughly true, but reclaim the right source — `demos/speed-comparison/`. |
-| `.stats .stat` block | `23×` faster than Playwright | Still true in `demos/speed-comparison/`. |
+| `.stats .stat` block | `23×` faster than Playwright | True on local dev (Apple M-series). First CI run on shared Azure Ubuntu measured 8.58× at 50 iterations; stat block and §3 explainer now show the dev-vs-CI split explicitly. Ubuntu-full CI floor set to 7× (below observed 8.58× with cushion). |
 | `.stats .stat` block | `97.9% + non-emoji corpus agreement` | Stale; actual 98.81 % / 99.03 % / 98.60 % overall, emoji 99.75 %. |
 | `What makes this possible` | `94.5% / 94.7% / 94.3% overall` | Stale. Replace with 98.81 / 99.03 / 98.60. |
 | `What makes this possible` | `emoji sits at 90%` | Very stale. Replace with emoji 99.75 %. |
 
 The site-page edit is staged in the same commit as this PUBLISH.md — see
 the diff.
+
+### 4.1 · FINDINGS.md appended (not a drive-by fix)
+
+A new dated entry — *2026-04-18 — Pre-launch: CI speed-gate
+recalibration* — was appended to `FINDINGS.md` to record the first
+shared-runner benchmark (8.58× at 50 iters) and the iteration-count /
+CI-floor adjustments in `ubuntu-full.yml`. This is **not** the same
+category as the §10 "not silently fixing" doc-drift items: it is new
+measurement evidence that the public 23× / 8.6× split claim now rests
+on, so it belongs in the same commit as the split itself.
+
+Also updated in the same commit:
+
+- `.github/workflows/ubuntu-full.yml` — `--iterations=10` → `--iterations=50`,
+  bench-gate floor `10× → 7×`, with inline rationale in the YAML.
 
 ---
 

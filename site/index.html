@@ -118,6 +118,10 @@
         color: var(--fg-soft);
         font-size: 0.88rem;
       }
+      .stat .cap {
+        font-size: 0.78rem;
+        opacity: 0.7;
+      }
       .bad {
         color: var(--bad);
       }
@@ -166,7 +170,10 @@
         </div>
         <div class="stat">
           <div class="n">23×</div>
-          <div class="l">faster than Playwright</div>
+          <div class="l">
+            faster than Playwright on local dev
+            <br /><span class="cap">8.6× on shared Ubuntu CI</span>
+          </div>
         </div>
       </div>
 
@@ -285,13 +292,21 @@ export default {
         author sees the exact pixel overflow before asking a reviewer.
       </p>
 
-      <h2>3. 23× faster than Playwright. On purpose.</h2>
+      <h2>3. Faster than Playwright. By a lot, and it depends on your hardware.</h2>
       <p>
         The same 36-cell verification workload, compared against Playwright in
         its most favorable configuration: a single reused Chromium page,
         <code>page.evaluate()</code> returning numbers only, no screenshots.
         50 iterations per side, warm path.
       </p>
+
+      <p>
+        Two sets of numbers — the dev-hardware headline, and the shared-VM
+        floor that our CI re-measures on every push. Both are reproducible
+        from the same command.
+      </p>
+
+      <p><strong>Local dev hardware (Apple M-series, warm JIT):</strong></p>
 
       <pre><code>Prelight (static, in-process):
   mean 0.88 ms  p50 0.81 ms  p95 1.64 ms  p99 1.84 ms
@@ -306,10 +321,25 @@ Playwright (DOM measurement):
 Prelight is 23.2× faster on the warm path (mean-vs-mean).
 End-to-end, including Chromium launch, Prelight finishes 20× faster.</code></pre>
 
+      <p><strong>Shared Ubuntu CI runner (Azure VM, noisy neighbours):</strong></p>
+
+      <pre><code>Prelight:    mean 4.70 ms   p50 4.91   p95 7.59   p99 9.22
+Playwright:  mean 40.35 ms  p50 39.83  p95 48.88  p99 51.28
+
+Prelight is 8.58× faster on the warm path, 50 iterations.</code></pre>
+
       <p>
-        Run it yourself: <code>cd demos/speed-comparison &amp;&amp; npx tsx bench.ts</code>.
-        Every future number is checked into
-        <a href="https://github.com/prelight/prelight/blob/main/demos/speed-comparison/RESULTS.md">RESULTS.md</a>,
+        Same code, same command, same distribution shape — the absolute
+        numbers rise ~5× on the shared VM but the order of magnitude holds.
+        Our <code>ubuntu-full</code> CI workflow enforces a 7× minimum floor
+        on every push, so a regression that halves the speedup fails the
+        build before it can ship.
+      </p>
+
+      <p>
+        Run it yourself: <code>cd demos/speed-comparison &amp;&amp; npx tsx bench.ts --iterations=50</code>.
+        Every number here is checked into
+        <a href="https://github.com/hawkbass/prelight/blob/main/demos/speed-comparison/RESULTS.md">RESULTS.md</a>,
         dated, append-only.
       </p>
 

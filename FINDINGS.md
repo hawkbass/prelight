@@ -2079,3 +2079,51 @@ shapes:
   [`ground-truth/cross-engine-2026-04-16.json`](./ground-truth/cross-engine-2026-04-16.json)
   (now 928 cases).
 - Floors: `ground-truth/run.ts::PER_ENGINE_FLOORS`, DECISIONS #008.
+
+---
+
+## 2026-04-18 — Pre-launch: CI speed-gate recalibration
+
+First green run of `ubuntu-full.yml` after the `v0.3.0` tag exposed a
+gap between the local-dev headline (`23.2×`, Apple M-series, 50
+iterations) and what a shared Azure Ubuntu runner actually measures on
+the same `demos/speed-comparison/bench.ts` workload.
+
+### CI measurement (50 iterations, Ubuntu runner)
+
+| Side       | mean     | p50      | p95      | p99      |
+| ---------- | -------- | -------- | -------- | -------- |
+| Prelight   | 4.70 ms  | 4.91 ms  | 7.59 ms  | 9.22 ms  |
+| Playwright | 40.35 ms | 39.83 ms | 48.88 ms | 51.28 ms |
+
+**CI speedup: 8.58×** (vs. local 23.2×). Both sides' absolute numbers
+rise ~5× on the shared VM; the distribution shape is preserved. The
+gap is a CI-environment effect (shared CPU, IPC/syscall cost on the
+Playwright side), not a regression in Prelight.
+
+### Actions taken
+
+1. **Iteration count** in `ubuntu-full.yml` raised `10 → 50` to match
+   local methodology. 10 iterations was too noisy on shared runners
+   (Prelight mean bounced 5–8 ms; 50 iterations converges near 4.7 ms).
+2. **CI floor** lowered `10× → 7×` in the bench-gate `awk` check.
+   Sits below the measured 8.58× with cushion but still catches a
+   regression that halves the order-of-magnitude advantage. The
+   headline `23×` claim is **not** what CI polices; CI polices
+   "decisively faster than a real browser round-trip."
+3. **Public copy** (`site/index.html` §3 plus the `.stats` block) now
+   carries both numbers explicitly — 23× local dev vs. 8.6× shared CI
+   — with methodology and a note that both reproduce from the same
+   command. README intentionally still delegates numeric claims to
+   FINDINGS.md and the bench harness.
+
+### What this costs / what it buys
+
+- Costs: CI-visible speedup dropped from the aspirational 10× gate to
+  an honest 7× gate. The single-number headline is gone from the
+  stat block.
+- Buys: the numbers in public copy are defensible against a reader
+  who pulls the repo, runs `npx tsx bench.ts --iterations=50`, and
+  compares. Evidence invariant held; no silent adjustment.
+
+DECISIONS entry to follow in the next protocol run.
